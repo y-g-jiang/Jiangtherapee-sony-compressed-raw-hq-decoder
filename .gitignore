@@ -1,0 +1,29 @@
+__pycache__/
+*.py[cod]
+
+.venv/
+venv/
+
+out/
+logs/
+*.log
+*.tmp
+
+# Camera inputs and generated decoder outputs
+*.ARW
+*.arw
+*.raw
+*.dng
+*.DNG
+*.tif
+*.tiff
+*.png
+*.asm
+
+# Keep the small checked-in LUT artifact, but avoid accidental plane dumps.
+*.bin
+!tools/data/sony_llvc3_static_lut4096_padded_u16.bin
+
+# Local proprietary binaries should never be published here.
+*.exe
+*.dll
