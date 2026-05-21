@@ -37,8 +37,8 @@ def recombine(c0: np.ndarray, c1: np.ndarray, c2: np.ndarray) -> np.ndarray:
         raise ValueError(f"unexpected plane shapes: {c0.shape}, {c1.shape}, {c2.shape}")
     out = np.empty((half_h * 2, width), dtype=np.uint16)
     out[0::2, 0::2] = c1
-    out[0::2, 1::2] = c0[:, 0::2]
-    out[1::2, 0::2] = c0[:, 1::2]
+    out[0::2, 1::2] = c0[:, 1::2]
+    out[1::2, 0::2] = c0[:, 0::2]
     out[1::2, 1::2] = c2
     return out
 
