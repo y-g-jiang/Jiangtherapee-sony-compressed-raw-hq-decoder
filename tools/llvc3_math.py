@@ -79,6 +79,52 @@ def sony_inv53_1d(low: np.ndarray, high: np.ndarray, axis: int) -> np.ndarray:
     raise ValueError("axis must be 0 or 1")
 
 
+def sony_inv53_1d_high_leading(low: np.ndarray, high: np.ndarray) -> np.ndarray:
+    """Vertical inverse 5/3 where Sony's guard line makes the high row lead."""
+
+    lo = np.asarray(low, dtype=np.int32)
+    hi = np.asarray(high, dtype=np.int32)
+    if hi.shape[1] != lo.shape[1]:
+        raise ValueError(f"unexpected high-leading shapes: low={lo.shape}, high={hi.shape}")
+
+    if hi.shape[0] == lo.shape[0] + 1:
+        lo2 = lo - ((hi[:-1] + hi[1:] + 2) >> 2)
+        hi2 = np.empty_like(hi)
+        hi2[0] = hi[0] + lo2[0]
+        if lo2.shape[0] > 1:
+            hi2[1:-1] = hi[1:-1] + ((lo2[:-1] + lo2[1:]) >> 1)
+        hi2[-1] = hi[-1] + lo2[-1]
+        out = np.empty((lo.shape[0] * 2 + 1, lo.shape[1]), dtype=np.int32)
+    elif hi.shape[0] == lo.shape[0]:
+        hi_next = np.vstack([hi[1:], hi[-1:]])
+        lo2 = lo - ((hi + hi_next + 2) >> 2)
+        hi2 = np.empty_like(hi)
+        hi2[0] = hi[0] + lo2[0]
+        if lo2.shape[0] > 1:
+            hi2[1:] = hi[1:] + ((lo2[:-1] + lo2[1:]) >> 1)
+        out = np.empty((lo.shape[0] * 2, lo.shape[1]), dtype=np.int32)
+    else:
+        raise ValueError(f"unexpected high-leading row counts: low={lo.shape}, high={hi.shape}")
+
+    out[0::2] = hi2
+    out[1::2] = lo2
+    return out
+
+
+def llvc3_edge_detail(x: np.ndarray, edge_mode: str = "even") -> np.ndarray:
+    """Expand Sony's edge-only HH detail row."""
+
+    xi = x.astype(np.int32)
+    signed_half_step = np.where(xi > 0, 1, np.where(xi < 0, -1, 0))
+    if edge_mode == "even":
+        mask = ((xi & 1) == 0) & (xi != 0)
+    elif edge_mode == "odd":
+        mask = (xi & 1) != 0
+    else:
+        raise ValueError(f"unknown LLVC3 edge_mode {edge_mode!r}")
+    return (2 * xi + np.where(mask, signed_half_step, 0)).astype(np.int32)
+
+
 def synthesize_llvc3_level(ll: np.ndarray, sub0: np.ndarray, sub1: np.ndarray, sub2: np.ndarray) -> np.ndarray:
     """Synthesize one LLVC3 scale from LL plus three detail subbands.
 
@@ -159,20 +205,9 @@ def synthesize_llvc3_level_stride(
 
     hh = np.empty((h, w), dtype=np.int32)
 
-    def edge_fn(x: np.ndarray) -> np.ndarray:
-        xi = x.astype(np.int32)
-        signed_half_step = np.where(xi > 0, 1, np.where(xi < 0, -1, 0))
-        if edge_mode == "even":
-            mask = ((xi & 1) == 0) & (xi != 0)
-        elif edge_mode == "odd":
-            mask = (xi & 1) != 0
-        else:
-            raise ValueError(f"unknown LLVC3 edge_mode {edge_mode!r}")
-        return (2 * xi + np.where(mask, signed_half_step, 0)).astype(np.int32)
-
-    hh[:edge_rows] = edge_fn(sub1[:edge_rows])
+    hh[:edge_rows] = llvc3_edge_detail(sub1[:edge_rows], edge_mode)
     hh[edge_rows : h - edge_rows] = sub2[np.arange(edge_rows, h - edge_rows) + edge_rows]
-    bottom_hh = edge_fn(sub1[h : h + edge_rows])
+    bottom_hh = llvc3_edge_detail(sub1[h : h + edge_rows], edge_mode)
     if bottom_hh_extra is not None:
         extra = np.asarray(bottom_hh_extra, dtype=np.int32)
         if extra.shape != bottom_hh.shape:
@@ -185,7 +220,87 @@ def synthesize_llvc3_level_stride(
     return sony_inv53_1d(low_horizontal, high_horizontal, axis=1)
 
 
-def synthesize_llvc3_final_green(ll: np.ndarray, detail: np.ndarray) -> np.ndarray:
+def synthesize_llvc3_guard_group1(ll: np.ndarray, sub0: np.ndarray, sub1: np.ndarray, sub2: np.ndarray) -> np.ndarray:
+    """Guard-row group 1 synthesis used by non-16-aligned LLVC heights."""
+
+    ll_i = np.asarray(ll, dtype=np.int32)
+    h, w = ll_i.shape
+    if sub0.shape != sub1.shape or sub1.shape != sub2.shape or sub0.shape[1] != w:
+        raise ValueError(f"unexpected subband shapes: ll={ll_i.shape}, sub0={sub0.shape}, sub1={sub1.shape}, sub2={sub2.shape}")
+    if sub0.shape[0] < h + 2:
+        raise ValueError(f"not enough guarded group1 rows: ll={ll_i.shape}, sub={sub0.shape}")
+
+    lh = np.empty((h + 1, w), dtype=np.int32)
+    lh[:-1] = sub1[1 : 1 + h]
+    lh[-1] = sub0[h + 1]
+
+    hh = np.empty((h + 1, w), dtype=np.int32)
+    hh[:-1] = sub2[1 : 1 + h]
+    hh[-1] = sub1[h + 1]
+
+    low_horizontal = sony_inv53_1d_high_leading(ll_i, lh)
+    high_horizontal = sony_inv53_1d_high_leading(sub0[1 : 1 + h], hh)
+    return sony_inv53_1d(low_horizontal, high_horizontal, axis=1)
+
+
+def synthesize_llvc3_guard_group2(
+    ll: np.ndarray, sub0: np.ndarray, sub1: np.ndarray, sub2: np.ndarray, edge_mode: str = "even"
+) -> np.ndarray:
+    """Guard-row group 2 synthesis for cropped-height ARW6 tiles."""
+
+    ll_i = np.asarray(ll, dtype=np.int32)
+    h, w = ll_i.shape
+    if sub0.shape != sub1.shape or sub1.shape != sub2.shape or sub0.shape[1] != w:
+        raise ValueError(f"unexpected subband shapes: ll={ll_i.shape}, sub0={sub0.shape}, sub1={sub1.shape}, sub2={sub2.shape}")
+    if sub0.shape[0] < h + 3:
+        raise ValueError(f"not enough guarded group2 rows: ll={ll_i.shape}, sub={sub0.shape}")
+
+    hl = sub0[2 : 2 + h]
+    lh = np.empty((h, w), dtype=np.int32)
+    lh[0] = sub0[0]
+    lh[1:] = sub1[2 : 1 + h]
+
+    hh = np.empty((h, w), dtype=np.int32)
+    hh[0] = llvc3_edge_detail(sub0[1:2], edge_mode)[0]
+    hh[1:] = sub2[2 : 1 + h]
+
+    low_horizontal = sony_inv53_1d_high_leading(ll_i, lh)
+    high_horizontal = sony_inv53_1d_high_leading(hl, hh)
+    return sony_inv53_1d(low_horizontal, high_horizontal, axis=1)
+
+
+def synthesize_llvc3_guard_group3(
+    ll: np.ndarray, sub0: np.ndarray, sub1: np.ndarray, sub2: np.ndarray, edge_mode: str = "even"
+) -> np.ndarray:
+    """Guard-row group 3 synthesis for cropped-height ARW6 tiles."""
+
+    ll_i = np.asarray(ll, dtype=np.int32)
+    h, w = ll_i.shape
+    if sub0.shape != sub1.shape or sub1.shape != sub2.shape or sub0.shape[1] != w:
+        raise ValueError(f"unexpected subband shapes: ll={ll_i.shape}, sub0={sub0.shape}, sub1={sub1.shape}, sub2={sub2.shape}")
+    if sub0.shape[0] < h + 5:
+        raise ValueError(f"not enough guarded group3 rows: ll={ll_i.shape}, sub={sub0.shape}")
+
+    hl = np.empty((h, w), dtype=np.int32)
+    hl[0] = sub0[0]
+    hl[1:] = sub0[4 : 3 + h]
+
+    lh = np.empty((h, w), dtype=np.int32)
+    lh[0] = sub0[1]
+    lh[1:-1] = sub1[4 : 2 + h]
+    lh[-1] = sub0[h + 3]
+
+    hh = np.empty((h, w), dtype=np.int32)
+    hh[0] = llvc3_edge_detail(sub0[2:3], edge_mode)[0]
+    hh[1:-1] = sub2[4 : 2 + h]
+    hh[-1] = llvc3_edge_detail(sub0[h + 4 : h + 5], edge_mode)[0]
+
+    low_horizontal = sony_inv53_1d(ll_i, lh, axis=0)
+    high_horizontal = sony_inv53_1d(hl, hh, axis=0)
+    return sony_inv53_1d(low_horizontal, high_horizontal, axis=1)
+
+
+def synthesize_llvc3_final_green(ll: np.ndarray, detail: np.ndarray, top_rows: int = 4) -> np.ndarray:
     """Final CFA-green reconstruction, from the 0x1ab570 path.
 
     Not the same 2-D 5/3 inverse used by groups 1..3. It expands the half-width
@@ -197,14 +312,16 @@ def synthesize_llvc3_final_green(ll: np.ndarray, detail: np.ndarray) -> np.ndarr
     ll_i = np.asarray(ll, dtype=np.int32)
     det = np.asarray(detail, dtype=np.int32)
     h, w = ll_i.shape
-    if det.shape[1] != w or det.shape[0] < h + 4:
+    if not 0 <= top_rows <= 8:
+        raise ValueError(f"unexpected final green top row count {top_rows}")
+    if det.shape[1] != w or det.shape[0] < 8 + max(0, h - top_rows):
         raise ValueError(f"unexpected final green shapes: ll={ll_i.shape}, detail={det.shape}")
 
     selected = np.empty((h, w), dtype=np.int32)
-    top = min(4, h)
+    top = min(top_rows, h)
     selected[:top] = det[:top]
-    if h > 4:
-        selected[4:] = det[8 : 8 + (h - 4)]
+    if h > top:
+        selected[top:] = det[8 : 8 + (h - top)]
 
     odd_green = np.empty((h, w), dtype=np.int32)
     for y in range(h):

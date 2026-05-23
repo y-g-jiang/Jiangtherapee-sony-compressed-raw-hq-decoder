@@ -87,6 +87,18 @@ class LlvcHeader:
 
 
 @dataclass
+class LlvcStreamInfo:
+    index: int
+    offset: int
+    length: int
+    header: LlvcHeader
+    tile_x: int
+    tile_y: int
+    tile_width: int
+    tile_height: int
+
+
+@dataclass
 class DirectoryEntry:
     group: int
     index: int
@@ -236,6 +248,116 @@ def initial_group_lengths(stream: bytes) -> list[int]:
     return [((u32be(stream, 0x10 + off) >> 4) & 0x0FFFFFF0) for off in (0, 3, 6, 9, 12)]
 
 
+def llvc_stream_length(stream: bytes) -> int:
+    """Return the byte span occupied by one LLVC3 stream.
+
+    Sony places packet payloads at offset 0x80 inside each stream. The five
+    group lengths in the LLVC3 header cover the packet area after that base.
+    """
+
+    return 0x80 + sum(initial_group_lengths(stream))
+
+
+def is_plausible_llvc_header(header: LlvcHeader) -> bool:
+    return (
+        header.magic in {"A000", "0000"}
+        and header.coded_width > 0
+        and header.coded_half_height > 0
+        and header.decoded_bits == 16
+        and header.component_count == 3
+        and header.mode == 3
+    )
+
+
+def find_llvc_streams(strip: bytes) -> list[LlvcStreamInfo]:
+    """Find all LLVC3 streams inside an ARW6 raw strip.
+
+    Earlier ARW6/cRAW HQ files in this workbench carry a single stream at
+    0x200. Higher-resolution files can tile the image as several consecutive
+    LLVC3 streams. The strip preamble's first little-endian u32 is the observed
+    stream count, so use it first and fall back to a conservative scan.
+    """
+
+    streams: list[LlvcStreamInfo] = []
+    count = u32le(strip, 0) if len(strip) >= 4 else 0
+    if 1 <= count <= 16 and len(strip) >= RAW_STREAM_OFFSET + 0x80:
+        for index in range(count):
+            entry = 0x08 + index * 0x18
+            if entry + 0x18 > len(strip):
+                streams = []
+                break
+            table_offset = u32le(strip, entry)
+            tile_x = u32le(strip, entry + 0x08)
+            tile_y = u32le(strip, entry + 0x0C)
+            tile_width = u32le(strip, entry + 0x10)
+            tile_height = u32le(strip, entry + 0x14)
+            pos = table_offset if table_offset else RAW_STREAM_OFFSET
+            found_pos: int | None = None
+            search_end = min(len(strip) - 0x80, pos + 0x1000)
+            for candidate in range(pos, search_end + 1, 0x10):
+                try:
+                    candidate_header = parse_llvc_header(strip[candidate:])
+                except Exception:
+                    continue
+                if is_plausible_llvc_header(candidate_header):
+                    found_pos = candidate
+                    header = candidate_header
+                    break
+            if found_pos is None:
+                streams = []
+                break
+            pos = found_pos
+            if not is_plausible_llvc_header(header):
+                streams = []
+                break
+            length = llvc_stream_length(strip[pos:])
+            if length <= 0x80 or pos + length > len(strip):
+                streams = []
+                break
+            streams.append(
+                LlvcStreamInfo(
+                    index=index,
+                    offset=pos,
+                    length=length,
+                    header=header,
+                    tile_x=tile_x,
+                    tile_y=tile_y,
+                    tile_width=tile_width or header.coded_width,
+                    tile_height=tile_height or header.logical_height,
+                )
+            )
+        if len(streams) == count:
+            return streams
+
+    # Fallback for files whose preamble is not yet understood.
+    for pos in range(RAW_STREAM_OFFSET, max(RAW_STREAM_OFFSET, len(strip) - 0x80), 0x10):
+        try:
+            header = parse_llvc_header(strip[pos:])
+        except Exception:
+            continue
+        if not is_plausible_llvc_header(header):
+            continue
+        try:
+            length = llvc_stream_length(strip[pos:])
+        except Exception:
+            continue
+        if length <= 0x80 or pos + length > len(strip):
+            continue
+        streams.append(
+            LlvcStreamInfo(
+                index=len(streams),
+                offset=pos,
+                length=length,
+                header=header,
+                tile_x=0,
+                tile_y=0,
+                tile_width=header.coded_width,
+                tile_height=header.logical_height,
+            )
+        )
+    return streams
+
+
 def parse_directory(stream: bytes) -> tuple[int, list[DirectoryEntry], list[dict[str, Any]]]:
     group_lengths = initial_group_lengths(stream)
     pos = 0x30
@@ -356,8 +478,12 @@ def main() -> None:
     ns = ap.parse_args()
 
     raw_info, strip = find_raw_subifd(Path(ns.path))
-    stream = strip[RAW_STREAM_OFFSET:]
-    header = parse_llvc_header(stream)
+    streams = find_llvc_streams(strip)
+    if not streams:
+        raise ValueError("no LLVC3 stream found in ARW6 raw strip")
+    primary = streams[0]
+    stream = strip[primary.offset : primary.offset + primary.length]
+    header = primary.header
     consumed, entries, groups = parse_directory(stream)
     packets = [parse_packet(stream, entry) for entry in entries]
     all_valid = all(all(p.validation.values()) for p in packets)
@@ -368,7 +494,8 @@ def main() -> None:
         "input": str(ns.path),
         "raw_subifd": asdict(raw_info),
         "llvc_header": asdict(header),
-        "stream_offset_inside_raw_strip": RAW_STREAM_OFFSET,
+        "llvc_streams": [asdict(s) for s in streams],
+        "stream_offset_inside_raw_strip": primary.offset,
         "strip_preamble_first_32": strip[:32].hex(" "),
         "directory": {
             "consumed_bytes_after_stream_header": consumed - 0x10,
@@ -383,7 +510,7 @@ def main() -> None:
             "all_packet_validations_pass": all_valid,
             "total_packet_bytes": sum(p.directory_length for p in packets),
             "payload_bytes_from_records": sum(p.payload_bytes_from_records for p in packets),
-            "metrics": derive_metrics(raw_info, len(strip), len(stream)),
+            "metrics": derive_metrics(raw_info, len(strip), sum(s.length for s in streams)),
         },
     }
     out = Path(ns.out)

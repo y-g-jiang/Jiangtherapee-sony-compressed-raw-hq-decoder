@@ -13,7 +13,7 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from llvc3_bitstream_probe import find_raw_subifd
+from llvc3_bitstream_probe import find_llvc_streams, find_raw_subifd
 from llvc3_entropy import decode_packet_arrays, integrate_type1_coefficients
 from llvc3_math import (
     finalize_llvc3_color_planes,
@@ -80,36 +80,56 @@ def compare_code(pred_code: np.ndarray, native_path: Path, inv: np.ndarray, shap
     return out
 
 
-def decode_levels(arw: Path) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
-    raw_info, _ = find_raw_subifd(arw)
-    low_rows = raw_info.height // 16
+def crop_to_header_half_height(
+    planes: tuple[np.ndarray, np.ndarray, np.ndarray], half_height: int
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    if planes[0].shape[0] == half_height:
+        return planes
+    extra_rows = planes[0].shape[0] - half_height
+    if extra_rows < 0:
+        raise ValueError(f"decoded {planes[0].shape[0]} rows, expected at least {half_height}")
+    top_crop = extra_rows // 2
+    bottom = top_crop + half_height
+    return tuple(plane[top_crop:bottom] for plane in planes)  # type: ignore[return-value]
 
-    g0, _ = decode_packet_arrays(arw, 0, 0)
+
+def decode_levels(arw: Path, stream_index: int = 0) -> dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]]:
+    _raw_info, strip = find_raw_subifd(arw)
+    streams = find_llvc_streams(strip)
+    if not streams:
+        raise ValueError("no LLVC3 stream found in ARW6 raw strip")
+    if stream_index < 0 or stream_index >= len(streams):
+        raise ValueError(f"stream_index {stream_index} out of range for {len(streams)} LLVC3 streams")
+    header = streams[stream_index].header
+    low_rows = (header.coded_half_height + 7) // 8
+
+    g0, _ = decode_packet_arrays(arw, 0, 0, stream_index=stream_index)
     green = integrate_type1_coefficients(g0[0][:low_rows], 2048) - 2048
-    r0, _ = decode_packet_arrays(arw, 0, 1)
+    r0, _ = decode_packet_arrays(arw, 0, 1, stream_index=stream_index)
     red_res = integrate_type1_coefficients(r0[0][:low_rows], 0)
-    b0, _ = decode_packet_arrays(arw, 0, 2)
+    b0, _ = decode_packet_arrays(arw, 0, 2, stream_index=stream_index)
     blue_res = integrate_type1_coefficients(b0[0][:low_rows], 0)
 
     levels: dict[str, tuple[np.ndarray, np.ndarray, np.ndarray]] = {"v4": (green, red_res, blue_res)}
     for group, edge_rows in ((1, 0), (2, 1), (3, 2)):
         old_green, old_red_res, old_blue_res = green, red_res, blue_res
 
-        planes, _ = decode_packet_arrays(arw, group, 0)
+        planes, _ = decode_packet_arrays(arw, group, 0, stream_index=stream_index)
         green = synthesize_llvc3_level_stride(old_green, planes[0], planes[1], planes[2], edge_rows)
 
-        planes, _ = decode_packet_arrays(arw, group, 1)
+        planes, _ = decode_packet_arrays(arw, group, 1, stream_index=stream_index)
         edge_mode = "odd" if group == 3 else "even"
         red_res = synthesize_llvc3_level_stride(old_red_res, planes[0], planes[1], planes[2], edge_rows, edge_mode=edge_mode)
 
-        planes, _ = decode_packet_arrays(arw, group, 2)
+        planes, _ = decode_packet_arrays(arw, group, 2, stream_index=stream_index)
         blue_res = synthesize_llvc3_level_stride(old_blue_res, planes[0], planes[1], planes[2], edge_rows, edge_mode=edge_mode)
 
         levels[f"v{4 - group}"] = (green, red_res, blue_res)
 
-    g4, _ = decode_packet_arrays(arw, 4, 0)
+    g4, _ = decode_packet_arrays(arw, 4, 0, stream_index=stream_index)
     full_green = synthesize_llvc3_final_green(green, g4[0])
     c0, c1, c2 = finalize_llvc3_color_planes(green, green + 2 * red_res, green + 2 * blue_res, full_green)
+    c0, c1, c2 = crop_to_header_half_height((c0, c1, c2), header.coded_half_height)
     levels["v0"] = (c0, (c1 - c0[:, 0::2]) // 2, (c2 - c0[:, 0::2]) // 2)
     levels["v0_planes"] = (c0, c1, c2)
     return levels
@@ -120,15 +140,16 @@ def main() -> None:
     ap.add_argument("arw")
     ap.add_argument("--native-dir", default="out/crawhq_layers_native")
     ap.add_argument("--native-final-prefix", required=True)
+    ap.add_argument("--stream-index", type=int, default=0)
     ap.add_argument("--lut", default="tools/data/sony_llvc3_static_lut4096.tsv")
     ap.add_argument("--out", default="")
     ns = ap.parse_args()
 
     arw = Path(ns.arw)
     inv = build_inverse_lut(load_lut(Path(ns.lut)))
-    levels = decode_levels(arw)
+    levels = decode_levels(arw, stream_index=ns.stream_index)
     native_dir = Path(ns.native_dir)
-    result: dict[str, Any] = {"input": str(arw), "layers": {}}
+    result: dict[str, Any] = {"input": str(arw), "stream_index": ns.stream_index, "layers": {}}
 
     for level in ("v4", "v3", "v2", "v1"):
         green, red_res, blue_res = levels[level]

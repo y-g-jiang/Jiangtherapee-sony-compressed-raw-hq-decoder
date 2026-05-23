@@ -55,7 +55,14 @@ def robust_preview(raw: np.ndarray, black: int, white: int) -> Image.Image:
     return Image.fromarray(img, mode="L")
 
 
-def write_dng(path: Path, raw: np.ndarray, black: int, white: int) -> None:
+def write_dng(
+    path: Path,
+    raw: np.ndarray,
+    black: int,
+    white: int,
+    crop_origin: tuple[int, int] = (12, 8),
+    crop_size: tuple[int, int] = (7008, 4672),
+) -> None:
     extratags = [
         (50706, "B", 4, (1, 4, 0, 0), False),  # DNGVersion
         (50707, "B", 4, (1, 1, 0, 0), False),  # DNGBackwardVersion
@@ -64,8 +71,8 @@ def write_dng(path: Path, raw: np.ndarray, black: int, white: int) -> None:
         (33422, "B", 4, (0, 1, 1, 2), False),  # CFAPattern = RGGB
         (50714, "H", 1, (black,), False),  # BlackLevel
         (50717, "H", 1, (white,), False),  # WhiteLevel
-        (50719, "I", 2, (12, 8), False),  # DefaultCropOrigin
-        (50720, "I", 2, (7008, 4672), False),  # DefaultCropSize
+        (50719, "I", 2, crop_origin, False),  # DefaultCropOrigin
+        (50720, "I", 2, crop_size, False),  # DefaultCropSize
         (50721, "i", 9, (10000, 0, 0, 0, 10000, 0, 0, 0, 10000), False),  # ColorMatrix1
         (50728, "H", 3, (1, 1, 1), False),  # AsShotNeutral
         (50778, "H", 1, (21,), False),  # CalibrationIlluminant1 = D65

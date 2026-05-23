@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
-from llvc3_bitstream_probe import RAW_STREAM_OFFSET, find_raw_subifd
+from llvc3_bitstream_probe import find_llvc_streams, find_raw_subifd
 
 
 @dataclass
@@ -275,19 +275,33 @@ def decode_record_component(
     return coeffs, widths, initial_width
 
 
-def load_packet(arw: Path, group: int, index: int) -> tuple[bytes, dict]:
-    from llvc3_bitstream_probe import parse_directory, parse_llvc_header, parse_packet
+def load_packet(arw: Path, group: int, index: int, stream_index: int = 0) -> tuple[bytes, dict]:
+    from llvc3_bitstream_probe import parse_directory, parse_packet
 
     raw_info, strip = find_raw_subifd(arw)
-    stream = strip[RAW_STREAM_OFFSET:]
-    parse_llvc_header(stream)
+    streams = find_llvc_streams(strip)
+    if not streams:
+        raise ValueError("no LLVC3 stream found in ARW6 raw strip")
+    if stream_index < 0 or stream_index >= len(streams):
+        raise ValueError(f"stream_index {stream_index} out of range for {len(streams)} LLVC3 streams")
+    stream_info = streams[stream_index]
+    stream = strip[stream_info.offset : stream_info.offset + stream_info.length]
     _consumed, entries, _groups = parse_directory(stream)
     entry = next(e for e in entries if e.group == group and e.index == index)
     packet_info = parse_packet(stream, entry)
     packet = stream[entry.start : entry.start + entry.length]
     info = json.loads(json.dumps(packet_info, default=lambda o: o.__dict__))
+    header = stream_info.header
+    work_width = header.coded_width
+    work_height = header.logical_height
     info["raw_width"] = raw_info.width
     info["raw_height"] = raw_info.height
+    info["work_width"] = work_width
+    info["work_height"] = work_height
+    info["stream_index"] = stream_index
+    info["stream_offset"] = stream_info.offset
+    info["stream_length"] = stream_info.length
+    info["llvc_header"] = header.__dict__
     return packet, info
 
 
@@ -359,13 +373,15 @@ def infer_packet_width(group: int, packet_type: int, raw_width: int = 7040) -> i
     raise ValueError(f"width inference not yet known for group {group}, type {packet_type}")
 
 
-def decode_packet_components(arw: Path, group: int, index: int, out_prefix: Path | None = None) -> dict[str, object]:
+def decode_packet_components(
+    arw: Path, group: int, index: int, out_prefix: Path | None = None, stream_index: int = 0
+) -> dict[str, object]:
     """Decode a type-1 or type-3 packet into one or three int32 component arrays."""
 
-    packet, info = load_packet(arw, group, index)
+    packet, info = load_packet(arw, group, index, stream_index=stream_index)
     packet_type = info["type2"]
     components = 1 if packet_type == 1 else 3
-    width = infer_packet_width(group, packet_type, int(info.get("raw_width", 7040)))
+    width = infer_packet_width(group, packet_type, int(info.get("work_width", info.get("raw_width", 7040))))
     row_multiplier = packet_row_multiplier(group)
     groups_per_row = (width + 3) // 4
     planes: list[list[list[int]]] = [[] for _ in range(components)]
@@ -401,15 +417,15 @@ def decode_packet_components(arw: Path, group: int, index: int, out_prefix: Path
     }
 
 
-def decode_packet_arrays(arw: Path, group: int, index: int) -> tuple[list["object"], dict[str, object]]:
+def decode_packet_arrays(arw: Path, group: int, index: int, stream_index: int = 0) -> tuple[list["object"], dict[str, object]]:
     """Decode a packet and return its int32 component arrays in memory."""
 
     import numpy as np
 
-    packet, info = load_packet(arw, group, index)
+    packet, info = load_packet(arw, group, index, stream_index=stream_index)
     packet_type = info["type2"]
     components = 1 if packet_type == 1 else 3
-    width = infer_packet_width(group, packet_type, int(info.get("raw_width", 7040)))
+    width = infer_packet_width(group, packet_type, int(info.get("work_width", info.get("raw_width", 7040))))
     row_multiplier = packet_row_multiplier(group)
     groups_per_row = (width + 3) // 4
     planes: list[list[list[int]]] = [[] for _ in range(components)]
@@ -425,6 +441,7 @@ def decode_packet_arrays(arw: Path, group: int, index: int) -> tuple[list["objec
     arrays = [np.asarray(rows, dtype=np.int32) for rows in planes]
     meta = {
         "packet": {"group": group, "index": index, "type": packet_type},
+        "stream_index": stream_index,
         "shape": [int(arrays[0].shape[0]), int(arrays[0].shape[1])],
         "row_multiplier": row_multiplier,
         "components": components,
@@ -433,13 +450,13 @@ def decode_packet_arrays(arw: Path, group: int, index: int) -> tuple[list["objec
     return arrays, meta
 
 
-def decode_type1_packet(arw: Path, group: int, index: int, out: Path | None = None) -> dict[str, object]:
+def decode_type1_packet(arw: Path, group: int, index: int, out: Path | None = None, stream_index: int = 0) -> dict[str, object]:
     """Decode an independently parsed type-1 packet into int32 coefficient rows."""
 
-    packet, info = load_packet(arw, group, index)
+    packet, info = load_packet(arw, group, index, stream_index=stream_index)
     if info["type2"] != 1:
         raise ValueError(f"packet g{group}i{index} is type {info['type2']}, not type 1")
-    width = infer_packet_width(group, info["type2"], int(info.get("raw_width", 7040)))
+    width = infer_packet_width(group, info["type2"], int(info.get("work_width", info.get("raw_width", 7040))))
     groups_per_row = (width + 3) // 4
     rows: list[list[int]] = []
     final_states: list[dict[str, int]] = []
@@ -501,14 +518,19 @@ def main() -> None:
     ap.add_argument("--index", type=int, default=2)
     ap.add_argument("--row", type=int, default=280)
     ap.add_argument("--groups", type=int, default=16)
+    ap.add_argument("--stream-index", type=int, default=0)
     ap.add_argument("--packet", action="store_true", help="decode the whole type-1 packet instead of one row")
     ap.add_argument("--components", action="store_true", help="decode a type-1/type-3 packet into component files")
     ap.add_argument("--out", default="")
     ns = ap.parse_args()
     if ns.components:
-        result = decode_packet_components(Path(ns.arw), ns.group, ns.index, Path(ns.out) if ns.out else None)
+        result = decode_packet_components(
+            Path(ns.arw), ns.group, ns.index, Path(ns.out) if ns.out else None, stream_index=ns.stream_index
+        )
     elif ns.packet:
-        result = decode_type1_packet(Path(ns.arw), ns.group, ns.index, Path(ns.out) if ns.out else None)
+        result = decode_type1_packet(
+            Path(ns.arw), ns.group, ns.index, Path(ns.out) if ns.out else None, stream_index=ns.stream_index
+        )
     else:
         result = replay_row(Path(ns.arw), ns.group, ns.index, ns.row, ns.groups)
     text = json.dumps(result, indent=2)
