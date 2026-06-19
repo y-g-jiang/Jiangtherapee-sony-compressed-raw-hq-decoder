@@ -69,7 +69,8 @@ def write_dng(
         (50708, "s", 1, "Sony ILCE-7M5 LLVC3 scratch", False),
         (33421, "H", 2, (2, 2), False),  # CFARepeatPatternDim
         (33422, "B", 4, (0, 1, 1, 2), False),  # CFAPattern = RGGB
-        (50714, "H", 1, (black,), False),  # BlackLevel
+        (50713, "H", 2, (2, 2), False),  # BlackLevelRepeatDim
+        (50714, "H", 4, (black, black, black, black), False),  # BlackLevel
         (50717, "H", 1, (white,), False),  # WhiteLevel
         (50719, "I", 2, crop_origin, False),  # DefaultCropOrigin
         (50720, "I", 2, crop_size, False),  # DefaultCropSize

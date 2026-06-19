@@ -355,7 +355,11 @@ def finalize_llvc3_color_planes(
     for the final CFA-green average:
 
         residual = (v1_color - v1_green) / 2
-        v0_color = average(final_green_pair) + 2 * residual
+        v0_color = average(clamp12(final_green_pair)) + 2 * residual
+
+    Sony clamps the two final green sites to the 12-bit code domain before using
+    them as the red/blue predictor. Without that, highlight green overshoot leaks
+    into R/B as one to three LUT code steps.
     """
 
     g = np.asarray(v1_green, dtype=np.int32)
@@ -367,7 +371,8 @@ def finalize_llvc3_color_planes(
     if r.shape != g.shape or b.shape != g.shape:
         raise ValueError(f"unexpected v1 color shapes: green={g.shape}, red={r.shape}, blue={b.shape}")
 
-    gavg = (fg[:, 0::2] + fg[:, 1::2]) >> 1
+    fg_pred = np.clip(fg + INTERNAL_BIAS, 0, 4095).astype(np.int32) - INTERNAL_BIAS
+    gavg = (fg_pred[:, 0::2] + fg_pred[:, 1::2]) >> 1
     red_residual = (r - g) // 2
     blue_residual = (b - g) // 2
     return fg, gavg + 2 * red_residual, gavg + 2 * blue_residual

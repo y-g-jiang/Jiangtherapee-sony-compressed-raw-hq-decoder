@@ -1,0 +1,647 @@
+                                       虚拟四平面 RGGB 同源代理压缩基准
+
+
+
+
+    虚拟四平面 RGGB 同源代理压缩基准：解码
+    路径反向编码、细节保持与等质量码率差报
+                                                 告
+                                     姜尧耕      Codex 协作实验记录
+
+
+
+
+           实验日期：2026-06-03        仓库：                                  I. 结论先行
+        Jiangtherapee-sony-craw-hq-decoder
+                                                          在 final L2 代理实验中，Nikon-like 均衡四平面变
+                                                      换代理在 24 组输入的中位整体指标上领先。这里的
+    摘要—本文给出一组同源、同目标码率的四平面 RGGB “码率”只指变换/量化符号的熵估计，不是完整码流
+RAW 代理压缩实验。实验对象不是 Nikon HE 或 Sony                     编码性能。六个目标码率点的整体马赛克 峰值信噪比
+CRAW HQ 的量产私有编码器，而是两个可复现的数学代
+                                                      差值（Sony-like 减 Nikon-like）分别约为 -5.83、-5.68、
+理：一类按 LibRaw #826 可见的 Nikon HE step1/step2、
+                                                      -3.63、-5.08、-6.99、-8.39 dB；Sony-like 绿色主干/残
+CDF 5/3、Bp/Br/GTLI/GCLI 与 IQX/IQP tone LUT
+建 模， 另 一 类 按 LibRaw #824/Sony ARW6 可 见 的              差代理的 nominal transform bpp 只低几千分之一 bpp，
+LLVC3 绿色主干、final-green 相位、R/B residual 与 4096-        不能抵消质量差距。以 Sony-like 绿色主干/残差代理
+entry LUT 建 模。 第 三 部 分 把 decoder-visible syntax、 相对 Nikon-like 均衡四平面变换代理计算，whole 峰
+packet/header 开销和 LUT code-domain 项并入 L2.5 合          值信噪比中位 BD 码率差为 +24.42%，表示达到同等
+并编码层模拟。无量化审计在码域代数上闭合；sample 域剩余
+                                                      whole-RAW 峰值信噪比时 Sony-like 绿色主干/残差代
+误差标记为 lut_projection_limited，因为 LUT 不是双射。
+                                                      理需要更多码率。
+输入为 24 组确定性合成 RGGB 马赛克，目标码率为 1.5、2.0、
+2.5、3.0、4.0、5.0 bpp；所有 CSV、BD-rate、图和 PDF                 但是，把结论写成“Nikon 一定比 Sony 好”同样
+均由 out/proxy_four_plane_benchmark_final_20260603/ 重   是错误的。首先，本实验是代理编码器实验，不是厂
+跑生成。结果显示，在 Nikon 路径进入提取出的 IQX/IQP                     商量产编码器实测。其次，当前 L2.5 模拟仍不是真
+tone-LUT 码域并改成 #826-like step1/step2 + CDF 5/3        实 NEF/ARW bitstream；真实 packet writer、precinct
+后，Nikon-like 均衡四平面变换代理在当前 L2 代理中取得
+                                                      writer、容器和相机侧率控都可能改写结果。本文的核心
+中位质量优势；L2.5 合并编码层模拟中，Sony-like 绿色主
+                                                      判断是：一旦把 Nikon #826 的 tone LUT、step1/step2、
+干/残差代理的 coded proxy bpp 中位比 Nikon-like 均衡
+四平面变换代理高约 1.02–2.98 bpp。同等质量 BD-rate 也                5/3 与 GCLI/GTLI 放进同一个代理，旧的绿色主干/残
+偏向 Nikon-like 均衡四平面变换代理：以 Sony-like 绿色主               差优势不能继续照搬；后续真正关键的是把两边都推进
+干/残差代理相对 Nikon-like 均衡四平面变换代理计，whole                  到可由 #824/#826 读取的真实 writer 层。
+峰值信噪比中位为 +24.42%，SSIM/MS-SSIM/GMSD 分                      图1 概括了两类代理结构。图2 到图5 给出第一部
+别为 +44.46%、+23.64%、+45.20%。两条路线都还缺真实
+                                                      分的变换层全局统计，图6 到图10 给出重点区域截图。
+bitstream/container writer，但 Nikon #826 side 的 tone
+                                                      表VII 给出第二部分码流层接入，图11、表VIII 和表IX
+LUT、Bp/Br/GTLI/GCLI 与 5/3 结构已经进入当前代理，
+不再是“未提取/未进入”的状态。                                      给出第三部分合并编码层模拟和最终合并判断。
+
+
+                                                                    II. 证据等级与边界
+    Index Terms—RAW 压缩，RGGB，Bayer，反向编码，
+峰值信噪比，SSIM，GMSD，BD 码率差，局部 ROI，代理                          本文证据等级为 L2：同源代理编码器基准。它满
+编码器                                                   足同源输入、同目标码率、RAW/CFA 域评价、多码率
+
+1                                             APHI Magazine                                2026 年 6 月
+                                           虚拟四平面 RGGB 同源代理压缩基准
+
+
+                                                                                  表 II
+                                                                         正式比较项目的文献来源审计
+
+                                                          比较项目           来源依据与本文用途                        状态
+
+                                                          每像素比特数与率失真     CFA/图像压缩论文通常报告 bpp 与重建质量 主比较
+                                                          曲线             曲线；Bjøntegaard 方法用于多码率率失真积
+                                                                         分 [7], [8]。
+                                                          峰值信噪比、MSE      ITU-T J.340 定义 PSNR；CFA 压缩综述也 主比较
+                                                                         使用 PSNR 比较 Bayer 重建质量 [2], [8]。
+                                                          平均绝对误差、MAX     JPEG-LS 近无损模式以最大绝对误差容差描 主比较
+                                                                         述重建保证；MAE 是逐点误差统计补充 [3]。
+                                                          R/G0/G1/B 与亮暗拆 Bayer/CFA 压缩研究在马赛克或相位数据上 主比较/ROI
+                                                          分              评价；JPEG2000/医学压缩也把 ROI 作为重
+图 1. 两类代理编码结构与解码反向关系。上方为均衡四平面变换路线；下方                                     点质量对象 [1], [8], [9], [10]。
+                                                          SSIM、MS-SSIM   Wang 等提出 SSIM 和 MS-SSIM 作为图像 主比较
+为绿色主干加红蓝残差路线。该图描述数学代理结构，不代表 Nikon 或 Sony
+                                                                         质量评价指标 [4], [5]。
+私有编码器实现；无量化闭合性由表III 给出。                                   GMSD           Xue 等提出 GMSD 作为高效感知图像质量指 主比较
+                                                                      标 [6]。
+                           表I
+                                                          梯度、拉普拉斯、高频、 本文脚本中的工程诊断视图；没有作为独立论 辅助诊断
+                        本文证据等级                            8x8 块误差        文指标参与主结论。
+
+    等级            状态与含义                                   其中 B = 512 是黑电平，W = 16383 是白电平，MSE
+    L1            未达到。真实同源 Nikon/Sony 量产编码器不可用。           为重建 RAW 值相对原始 RAW 值的均方误差。数值越
+    L2                          两个显式数学代理编码器，
+                  已达到。相同 RGGB 输入，
+                  受控目标 bpp，并检查无量化反向路径；Sony 4096
+                                                          高，表示平均平方误差越低。
+                  LUT 与 Nikon 提取出的 81792-entry IQX/IQP         平均绝对误差定义为
+                  tone LUT 已纳入码域闭环。仍未实现真实熵编码、
+                                                                                 1 ∑
+                                                                                     N
+                  扫描、量化表和容器 writer。
+    L3            非本文重点。公开样片通常难以保证同源与同码率。                                MAE =         |xi − x̂i |,             (2)
+                                                                                 N i=1
+    L4            已由可执行代理实验推进，但仍可作为结构背景。
+
+                                                          它比 峰值信噪比更容易解释为“平均每个 RAW 采样
+率失真汇总、局部 ROI 检查、解码路径反向编码闭合
+                                                          点偏离多少码值”。最大绝对误差（MAX）记录最坏采
+审计和可复现实验脚本等要求；但它不满足 L1，即真
+                                                          样点误差；JPEG-LS 的近无损模式本身就以最大绝对
+实同源量产编码器基准，因为当前环境没有 Nikon HE
+                                                          重建误差不超过给定容差为约束，因此 MAX 不是本文
+或 Sony CRAW HQ 的官方编码器。
+                                                          临时创造的比较项目 [3]。
+         表I 给出证据等级。这里必须特别强调：代理编码
+                                                               SSIM 衡量亮度、对比度和结构相似性，是 Wang
+器只用于讨论结构性取舍，不能把输出数字直接写成相
+                                                          等人在图像质量评价中提出的结构相似性指标 [4]。MS-
+机文件大小差，也不能把 BD 码率差直接解释为真实
+                                                          SSIM 把 SSIM 扩展到多尺度结构质量评价 [5]。GMSD
+NEF/ARW 容器大小差。
+                                                          使用梯度幅值相似性图的标准差作为质量退化指标，数
+                                                          值越低表示结构质量越好 [6]。本文对 R、G0、G1、B
+                     III. 术语与指标                           四个相位分别计算这些指标，再取四平面均值；这保持
+                                                          RAW/CFA 域评价，不引入去马赛克算法变量。
+         Bayer RGGB 阵列来自单片传感器色彩滤波阵列
+                                                               BD 码率差的英文原名是 Bjøntegaard Delta Rate。
+思想：绿色或亮度型采样占更高频率，红蓝提供色度信
+                                                          Bjøntegaard 在 VCEG-M33 中提出用多码率率失真曲
+息 [1]。本文把 512x512 RGGB 马赛克按相位拆成 R、
+                                                          线积分来计算平均 PSNR 差或平均码率差 [7]。本文报
+G0、G1、B 四个 256x256 平面，在去马赛克之前评价
+                                                          告的是：
+误差。这避免了去马赛克算法把压缩误差扩散或掩盖。
+         峰 值 信 噪 比 的 英 文 原 名 是 Peak Signal-to-Noise                          RSony−like − RNikon−like
+                                                                    ∆RBD =                            .         (3)
+                                                                                   RNikon−like
+Ratio。ITU-T J.340 把 PSNR 定义为峰值信号能量
+相对均方误差的对数比值，并把它作为客观质量指标的                                  因此正值表示达到同等质量时 Sony-like 绿色主干/残
+基准之一 [2]。本文在 RAW 域采用                                      差代理需要更多码率，也就是 Nikon-like 均衡四平面变
+                                                          换代理更省码率；负值则表示 Sony-like 绿色主干/残差
+                                 (W − B)2
+              PSNRraw = 10 log10          ,         (1)   代理更省码率。
+                                   MSE
+2                                                 APHI Magazine                                           2026 年 6 月
+                                           虚拟四平面 RGGB 同源代理压缩基准
+
+
+            IV. 第一部分：变换层代理效率                                                           表 III
+                                                                              解码路径反向编码闭合审计
+      本部分只评价从解码重建路径反推出来的变换、颜
+                                                        代理路径                   输入数 MAX          MAE       状态
+色/相位关系、加权量化和零阶熵代理效率。它回答的
+                                                        Nikon-like #826           24     1 < 0.001 LUT 投影受限
+问题是：如果暂时不考虑真实 bitstream 语法，哪一种
+                                                        step1/step2 + 5/3
+重建结构在相同代理熵下保留 RAW/CFA 信息更有效。 Sony-like 绿色主干/残差                                    24    12       ∼ 3 LUT 投影受限
+
+
+                                                        是该映射在无量化代数部分上的反向路径。也就是说，
+A. 输入与代理模型
+                                  编码器先从原始四平面 x = (R, G0, G1, B) 反推出解码
+      实验使用 24 组合成 RGGB 输入，覆盖平滑渐变、 器需要的中间分量，再送入二维 CDF 5/3 小波、标量
+细纹理、彩色边缘、高光滚降、暗部噪声、Bayer 相位                             量化和熵估计：
+混叠、强色度噪声、接近 Nyquist 极限的细节、局部块
+边界压力、红蓝通道细节和高 ISO 纹理。每组输入都                                                  Ec (x) = Q∆,w (WΦc (x)) ,             (9)
+由固定随机种子生成，因此结果可复现。
+                                                        其中 Φc 是对应解码器颜色/相位/码域重建映射 Φ−1
+      Nikon-like 均衡四平面变换代理的处理流程为：先                                                c
+                                                        的逆映射，W 是二维 CDF 5/3 小波，Q∆,w 是由目标
+把 四 平 面 样 本 反 查 到 提 取 出 的 IQX/IQP tone-LUT
+                                                        bpp 搜索得到的加权标量量化。解码端则为
+decoder code domain，再按 #826 step2_bayer_rows()
+和 step1 merge 的 可 见 方 程 反 推 出 p1_LL_step1、                 x̂ = Dc (Ec (x))
+p2_LH_step1、p3_HH_step1、p4_HL_step1，随后使用                                       (     −1 −1
+                                                                                                        )
+                                                              = clip[512,16383] Φ−1
+                                                                                 c W   Q∆,w (Ec (x)) + B .       (10)
+CDF 5/3 小波、加权量化和熵估计。该路径直接按
+step1/step2 + CDF 5/3 + tone LUT 码域建模。                  因此，本文所有主要失真都应该来自量化、码率分配和
+      Sony-like 绿色主干/残差代理的处理流程为：                        LUT 投影，而不是来自前后向结构不一致。
+                                                              Nikon-like 均 衡 四 平 面 变 换 代 理 使 用 #826-like
+                 Gbase = (G0 + G1)/2,             (4)
+                                                        step1/step2 码域路径；Sony-like 绿色主干/残差代理
+                Gphase = G0 − G1,                 (5)
+                                                        使用绿色主干和红蓝残差路径。对应解码端为
+                 Rres2 = (R − Gbase )/2,          (6)
+                 Bres2 = (B − Gbase )/2.          (7)                        R = Gbase + 2Rres2 ,                (11)
+                                                                            G0 = Gbase + Gphase /2,              (12)
+随后在 Sony 12-bit signed code domain 中对 Gbase 、
+                                                                            G1 = Gbase − Gphase /2,              (13)
+Gphase 、Rres2 、Bres2 做 CDF 5/3 小波和加权量化，绿色
+相位项还加入 row-diff。权重为 Gbase = 4.0、Gphase =                                     B = Gbase + 2Bres2 .                (14)
+
+1.25、Rres2 = 1.0、Bres2 = 1.0。重建后再通过 Sony
+                                                        这组公式是 Sony-like 绿色主干/残差代理码域路径的
+4096-entry LUT 回到 sample domain。
+                                                        简化表达；完整实现还包含 Sony LUT 反查与 sample-
+      实际 码率 定义 为量 化后 变 换 符 号 的 熵 除 以 完 整
+                                                        domain 映射。
+RGGB 马赛克采样点数量：
+                                                              表III 是无量化审计。脚本对 24 组合成输入分
+                 H(quantized transform symbols)         别执行 Dc (Ec0 (x))，其中 Ec0 表示关闭量化、只保留
+    actual bpp =                                . (8)
+                            NRGGB
+                                                        反 向 分 量 变 换 的 编 码 路 径。 码 域 代 数 闭 合；sample
+该值是数学载荷熵估计，不是 NEF/ARW 文件容器大                             域因为 Nikon/Sony LUT 都不是双射，审计状态为
+小，也不是真实 entropy coder 产生的 bitstream 长度。 lut_projection_limited。
+                                                              该 审 计 文 件 写 入                    out/proxy_four_plane_
+B. 解码路径的反向编码实现                                          benchmark_final_20260603/roundtrip_audit.csv。
+      为避免把“可解码的代理模型”误写成“真正实现                            如果未来把输入替换为真实 RAW 样本，且样本含有本
+了相机编码器”，本文把编码路径定义得更窄：给定一                                文声明 RAW 范围之外的黑边或保留码值，应把裁剪
+个代理解码器的重建映射 Dc ，本文实现的编码器 Ec                             域、黑电平、有效区和 LUT 可表示域重新声明。
+
+3                                               APHI Magazine                                               2026 年 6 月
+                                          虚拟四平面 RGGB 同源代理压缩基准
+
+
+
+
+                                                         图 3. 文献结构质量指标中 Sony-like 绿色主干/残差代理胜出的输入数量。数
+                                                         字越高，表示在该指标和码率点上 Sony-like 绿色主干/残差代理胜过 Nikon-
+图 2. 同目标码率下的整体马赛克中位差异。峰值信噪比差值为 Sony-like 减               like 均衡四平面变换代理的场景越多。SSIM/MS-SSIM 为越高越好，GMSD
+Nikon-like；平均绝对误差降低量为 Nikon-like 减 Sony-like。            为越低越好。
+
+                          表 IV                                                         表V
+               同目标码率下的整体马赛克中位结果                                         结构质量指标的中位差值（Sony-like 减 Nikon-like）
+
+
+    bpp   实际码率差       峰值信噪比差       平均绝对误差差      胜出数           bpp SSIM ×10−6 MS-SSIM ×10−6 GMSD ×10−6 胜出范围
+
+                                                                  1.5       -717.20      -58.42   +1067.00   5–8/24
+    1.5   -0.005752    -5.831 dB      +4.629    8/24
+                                                                  2.0       -220.16      -32.99   +612.68    3–6/24
+    2.0   -0.001606    -5.684 dB      +3.428    6/24
+                                                                  2.5        -92.21      -10.52    +90.49    3–8/24
+    2.5   -0.000648    -3.630 dB      +1.669    7/24              3.0        -79.42       -5.22    +75.54    3–7/24
+    3.0   -0.001106    -5.081 dB      +1.507    5/24              4.0        -36.63       -4.19    +21.38    2–5/24
+    4.0   -0.000363    -6.993 dB      +1.512    4/24              5.0        -37.85       -3.92    +18.54    2–6/24
+    5.0   -0.000511    -8.385 dB      +1.912    3/24
+
+
+C. 整体同码率结果
+     图2 给出同目标码率下的整体马赛克中位差异。折
+线为 峰值信噪比差值，柱状为 平均绝对误差降低量；
+每个折线点上方的数字表示 Sony-like 绿色主干/残差
+代理在 24 组输入中以 峰值信噪比胜出的组数。
+     表IV 表明，实际码率差仍很小，比较基本可视为同
+目标变换熵。final 整体中位结果偏向 Nikon-like 均衡
+四平面变换代理，说明在引入 #826 tone LUT 码域与
+step1/step2 反向路径后，旧的绿色主干/残差中位优势
+不再成立。                                                    图 4. final 等质量码率差。横轴为 Sony-like 绿色主干/残差代理相对 Nikon-
+                                                         like 均衡四平面变换代理的中位 BD 码率差；正值表示 Nikon-like 均衡四平
+                                                         面变换代理更省码率，负值表示 Sony-like 绿色主干/残差代理更省码率。
+D. 结构质量与细节诊断
+                                                         变换代理，胜出数量也偏向 Nikon-like 均衡四平面变
+     细节保持不能只看 峰值信噪比。本文把正式结构
+                                                         换代理；这与整体 峰值信噪比方向一致。梯度、拉普
+质量比较改为 SSIM、MS-SSIM 和 GMSD 三项文献指
+                                                         拉斯、高频能量和 8x8 块误差仍写入 metrics.csv 和
+标：SSIM 与 MS-SSIM 越高越好，GMSD 越低越好。
+                                                         detail_summary.csv，但本文只把它们用于后文局部
+每个指标先在 R、G0、G1、B 四个 RAW 相位上单独
+                                                         诊断图，不把它们当作正式比较项目。
+计算，再取四平面均值。
+     图3 和表V 均由 final 输出重画/重算。三个指标在
+所有码率点上的中位方向均偏向 Nikon-like 均衡四平                           E. 等质量码率差
+面变换代理，方向与整体 峰值信噪比中位结果一致。                                      图4 给出 final 输出的等质量 BD 码率差摘要。本
+     表V 的方向需要谨慎阅读：SSIM/MS-SSIM 正值                        文以 Sony-like 绿色主干/残差代理相对 Nikon-like 均
+为 Sony-like 绿色主干/残差代理更好，GMSD 负值为                         衡四平面变换代理计 BD 码率差；正值表示达到同等
+Sony-like 绿色主干/残差代理更好。final 结果中三项结                       质量时 Sony-like 绿色主干/残差代理需要更多码率，即
+构质量指标的中位方向均偏向 Nikon-like 均衡四平面                           Nikon-like 均衡四平面变换代理更省码率。
+
+4                                                 APHI Magazine                                              2026 年 6 月
+                                     虚拟四平面 RGGB 同源代理压缩基准
+
+
+                                                   G. 重点区域截图：提亮后的局部观察
+
+                                                        全局曲线不能代替局部检查。本文把关键场景重新
+                                                   按同一随机种子生成，并在 2.0 bpp 下分别用两个代
+                                                   理编码器重建，然后裁出 ROI。暗部和高 ISO ROI 使
+                                                   用显示增益或局部对比拉伸，以便观察压缩误差。所有
+                                                   ROI 图左侧为参考输入，中间为两个代理重建，右侧为
+                                                   亮度误差热图；红蓝代表误差方向，不代表色彩偏移。
+                                                       图6 和图7 是本文最关键的局部反例：它们说明“整
+                                                   体中位更好”不等价于“所有重点区域更好”。当 RAW
+                                                   后期需要大幅提亮暗部时，ROI 内 峰值信噪比、平均
+                                                   绝对误差和误差热图会比整体 峰值信噪比更接近实际
+                                                   风险。
+
+
+                                                   H. 纯细节截图：二阶响应与红蓝分相位
+图 5. 场景级胜负排序。横轴为六个码率点平均 峰值信噪比差值，正值偏向
+Sony-like 绿色主干/残差代理，负值偏向 Nikon-like 均衡四平面变换代理。          纯细节视图把亮度图转换为拉普拉斯二阶响
+    whole 峰值信噪比的中位 BD 码率差为 +24.42%， 应， 即 强 调 细 线、 纹 理 边 缘 和 局 部 起 伏。 图9 显 示
+2.5%–97.5% 输 入 范 围 为 -40.20% 到 +87.27%。 thin_black_lines 场景的二阶细节响应。左三幅比较
+R/G0/G1/B 四 个 相 位 分 别 为 +17.78%、+17.38%、 参考、Nikon-like 均衡四平面变换代理、Sony-like 绿色
++18.13%、+15.49%。亮暗拆分中，高光中位几乎持平                     主干/残差代理的二阶细节，右两幅为二阶细节误差。该
+       ，暗部中位为 -17.80%，说明暗部等质量码率
+（+0.09%）                                           视图比普通 RGB 截图更容易发现细线附近的过度平滑
+仍可能偏向 Sony-like 绿色主干/残差代理。结构质量指                    或误差颗粒。
+标 SSIM、MS-SSIM、GMSD 的中位 BD 码率差分别为                      图10 只观察 R/B 红蓝分相位误差。由于 Sony-like
++44.46%、+23.64%、+45.20%，没有推翻整体 峰值信                 绿色主干/残差代理以绿色平均值为主干，再保存红蓝
+噪比方向。                                              残差，当红蓝通道存在与绿色不强相关的细节时，R/B
+                                                   残差量化更容易显现为局部误差。final R/B 平面 BD
+F. 场景级胜负                                           码率差中位均为正值（Sony-like 绿色主干/残差代理相
+                                                   对 Nikon-like 均衡四平面变换代理），与该图的风险方
+    图5 按 六 个 码 率 点 平 均 峰 值 信 噪 比 差 值 排 序。
+                                                   向一致。
+正 值 表 示 Sony-like 绿 色 主 干/残 差 代 理 更 好， 负 值
+表示 Nikon-like 均衡四平面变换代理更好。Sony-like
+                                                           V. 第二部分：码流层可解码性评价
+绿色主干/残差代理只在 5/24 组输入中取得正的平
+均 整 体 峰 值 信 噪 比 差， 主 要 是 bayer_phase_steps、            完整 encoder 的性能和可用性还取决于码流层。一
+chroma_noise、green_phase_alias、nyquist_checker 和   个可以被 LibRaw #824/#826 类 decoder 接收的输出，
+thin_black_lines。Nikon-like 均 衡 四 平 面 变 换 代        不仅要有反向变换，还必须能生成 decoder 期望的容
+理 在 其 余 19/24 组 输 入 中 整 体 更 高， 尤 其                 器、packet、熵码、扫描顺序、量化侧信息、LUT/码值
+是 smooth_gradient、skin_like_smooth、slanted_edge、 域和边界规则。本文把这些项目作为第二部分单独评
+highlight_rolloff、high_iso_texture 和 shadow_noise。 价。
+    这个排序解释了为什么不能把旧绿色主干结论直                              表VI 的含义是：本文第一部分已经把可逆变换和
+接外推。绿色主干/残差结构在某些相位或棋盘压力场                           量化代理做成闭合结构，但它还不是 #824 或 #826 可
+景中仍有优势；但当输入进入 Nikon #826 tone-LUT                  以直接读取的 bitstream。若要从“数学代理 encoder”
+码域并用 step1/step2 + 5/3 表示后，整体中位和多数                 走到“几乎可以被 #824/#826 直接解码”的形态，必
+场景都偏向 Nikon-like 均衡四平面变换代理。                        须把每一项补成 decoder 语法能接受的实际字段。
+
+5                                          APHI Magazine                         2026 年 6 月
+                                     虚拟四平面 RGGB 同源代理压缩基准
+
+
+
+
+图 6. 暗部提亮 ROI：shadow_noise，2.0 bpp，显示增益 8x。该局部区域中 Nikon-like 均衡四平面变换代理的 ROI 峰值信噪比为 70.2 dB、平均绝对误差
+为 3.9；Sony-like 绿色主干/残差代理为 67.3 dB、平均绝对误差为 5.5。该暗部噪声 ROI 与 final 整体中位方向一致，偏向 Nikon-like 均衡四平面变换代理。
+
+
+
+
+图 7. 高 ISO 纹理 ROI：high_iso_texture，2.0 bpp，局部对比拉伸。该区域中 Nikon-like 均衡四平面变换代理的 ROI 峰值信噪比为 61.6 dB、平均绝
+对误差为 10.6；Sony-like 绿色主干/残差代理为 58.0 dB、平均绝对误差为 16.1。误差热图显示 Sony-like 绿色主干/残差代理在噪声纹理上更容易产生较强
+局部误差。
+
+
+
+
+图 8. 高光滚降 ROI：highlight_rolloff，2.0 bpp，局部对比拉伸。该图用于检查高光附近的局部亮度误差和色彩残差传播。高光滚降场景在六个码率点整
+体上偏向 Nikon-like 均衡四平面变换代理，原因是绿色预测主干在饱和附近更容易失去稳定残差关系。
+
+
+
+
+图 9. 纯细节响应 ROI：thin_black_lines，2.0 bpp。图中使用拉普拉斯二   图 10. 红蓝细节 ROI：red_blue_fine_text，2.0 bpp。左侧为局部彩色参
+阶响应突出细线和微纹理，右侧两幅为细节误差热图。                            考，后四幅分别为 Nikon-like 和 Sony-like 的 R/B 分相位误差。该图强调
+                                                    红蓝残差细节，而不是整体亮度。
+    从 表VII 看，Sony-like 绿 色 主 干/残 差 代 理 已 经
+进 入 #824 的 绿 色 主 干、R/B residual、final green         进入 #826 的 step1/step2、CDF 5/3、tone LUT 和
+clamp 和 Sony LUT 语 义， 但 仍 缺 真 实 LLVC3               Bp/Br/GTLI/GCLI 语义，但仍缺真实 precinct entropy
+packet writer。Nikon-like 均 衡 四 平 面 变 换 代 理 已 经      writer 和 NEF container writer。两者都还不能直接生
+
+6                                           APHI Magazine                                    2026 年 6 月
+                                              虚拟四平面 RGGB 同源代理压缩基准
+
+
+                             表 VI                               bpp 为 0.896，Sony-like 绿色主干/残差代理为 2.212；
+                 完整编码性能所需码流层项目与本文状态
+                                                                两者原变换熵几乎相同，但 state side-info 中位分别约
+项目               对编码性能和解码接入的影响                本文状态              为 0.1284 bpp 与 0.4177 bpp。
+熵编码              算术/ANS/Huffman/上下文模型会把同一组 未实测。当前只统                本文因此采用表IX 的合并评价，而不是只看 BD
+                 量化符号压成不同实际 bit 数；零阶熵只给理 计符号直方图熵。
+                 想下界。                                           码率差或只看 decoder 接近度。
+系数扫描             扫描顺序决定上下文、run-length、零串和局 未实测。当前没有
+                 部相关性，也决定 decoder 如何读回系数。     bitstream scan
+                                                                   最终总对比是：当前 final 代理下，Nikon-like 均衡
+                                       order。                   四平面变换代理因为已经进入 #826 step1/step2、CDF
+量化表/步长表          不同子带、颜色分量、局部块和高光/暗部可使 部分代理。只有全
+                 用不同量化规则，直接改变 RD 曲线形状。        局 base step、分     5/3、Bp/Br/GTLI/GCLI 和提取出的 IQX/IQP tone
+                                         量权重和子带权重。
+LUT/码值映射         RAW code 与样本值之间的非线性映射会改 已有具体 decoder
+                                                                LUT，在 L2 质量、BD-rate 和 L2.5 coded proxy bpp
+                 变误差量纲、高光行为和符号分布；这不是后 证据：#824 暴露                上都占优。Sony-like 绿色主干/残差代理仍有本项目
+                 处理装饰，而是 encoder 必须选择和反演的码 Sony 4096-entry
+                 域约束。                         code-to-sample    #824 解码路径、4096-entry LUT、final-green clamp 和
+                                              LUT，#826 暴露
+                                                                真实样本证据支撑，但它也必须补齐 LLVC3 packet
+                                              tone-curve LUT，
+                                              且 GCLI            writer。Nikon-like 均衡四平面变换代理的剩余瓶颈不
+                                              prediction LUT
+                                              还影响熵码状态；
+                                                                再是 tone LUT breakpoint，而是真实 precinct entropy
+                                              主实验仍使用线性          writer、NEF container writer 和 HE/HE* 变体验证。
+                                               RAW 码值。
+tile/packet 头部   分块头、长度字段、padding、guard rows 和 未计入。当前 bpp          这里的“几乎可以直接解码”不是指本文已经生成
+                 容器元数据会决定 #824/#826 是否能进入正 不含头部和容器。
+                 确解码路径。
+                                                                ARW/NEF 文件，而是指工程剩余工作已经被拆成明
+边界/裁剪规则          边界合成、guard height、黑白电平和有效区 部分声明。闭合审            确的 writer 清单：容器入口、扫描顺序、熵码、量化侧
+                 裁剪会改变闭合误差与 ROI 指标。           计仅覆盖本文合成
+                                              有效区。              信息、LUT 码域和边界规则。只有这些 writer 项补齐
+                                                                并通过 #824/#826 解码器逐像素验证后，才能把本文
+成可由 #824/#826 打开的文件。
+                                                                的代理评价升级为真正可直接解码的编码器评价。
+
+      VI. 第三部分：合并编码层代理模拟与总对比
+                                                                                VII. 综合讨论
+      把第一部分和第二部分合并后，可以得到一个更
+接近工程真实的总判断：变换层评价说明“哪种结构                                            本实验的主要技术解释有七点。
+在同源 RAW 上更省代理熵、误差在哪里”；码流层评                                         第一，反向编码闭合是后续数学评估的前提。若
+价说明“这种结构距离真实 decoder 可读 bitstream                               Dc (Ec0 (x)) 在无量化时已经不等于 x，那么后文的 峰值
+还 有 多 远” 。 为 了 避 免 第 三 部 分 只 停 留 在 文 字 判                        信噪比、SSIM/MS-SSIM、GMSD 和 BD 码率差会把
+断，本文新增一个 L2.5 合并编码层代理模拟：在原                                      实现误差与量化误差混在一起；表III 排除了这个问题。
+有量化变换符号熵之外，再加入 Sony LLVC3 adap-                                    第二，绿色主干效率来自 Bayer 先验。RGGB 中
+tive width/zero-run/magnitude/sign syntax、Nikon                 绿色采样密度高，且常与亮度结构相关；当 Gavg 是稳
+#826 Bp/Br/GTLI/GCLI significance/data/sign syn- 定亮度载体时，红蓝残差能被更低熵地表示，整体码率
+tax、packet/header 开销、Sony 4096-entry LUT code- 效率提高。
+domain 误差，以及 Nikon 已提取 IQX/IQP tone LUT                            第三，均衡四平面变换的优势来自较弱先验。它不
+code-domain 误差。该模拟仍不是量产 encoder，但它                              要求绿色一定可靠预测 R/B，因此在高 ISO、暗部和高
+把第二部分可推断的编码层内容压成了可复现数值。                                         光附近不容易因主干预测失效而把误差集中到局部。
+      图11 和表VIII 改变了第三部分的读法。final 结果                               第四，通道权重决定了分相位取舍。Sony-like 绿
+中 Nikon-like 均衡四平面变换代理在 L2 同目标变换                                色 主 干/残 差 代 理 对 Gavg 给 出 更 高 权 重 并 单 独 保
+熵下有中位质量优势；在 L2.5 模拟里，Sony-like 绿色                               存 final-green 相位；Nikon-like 均衡四平面变换代理
+主干/残差代理的 coded proxy bpp 中位高出约 1.02– 对 step1 四个中间平面分配权重，并让 CDF 5/3 与
+2.98 bpp。主要原因不是变换熵本身，而是显式 LLVC3- GCLI/GTLI proxy 共同决定码率侧信息。final BD 码
+like syntax payload 在当前模型里明显更重。2.0 bpp                          率差的 R/G0/G1/B 中位值均为正，说明当前参数下该
+时，Nikon-like 均衡四平面变换代理的中位 coded proxy                           取舍整体偏向 Nikon-like 均衡四平面变换代理，但少数
+
+7                                                      APHI Magazine                                2026 年 6 月
+                                                            虚拟四平面 RGGB 同源代理压缩基准
+
+
+                                                                            表 VII
+                                                             面向 #824/#826 的码流层接入评价
+
+    项目                        #824 Sony ARW6 CRAW HQ 接入要求                        #826 Nikon HE 接入要求                              当前代理状态
+
+    容器入口                      TIFF Compression=32766、Sony non-DNG CFA、 TIFF Compression=34713、Nikon 机型、strip 前                   未生成。
+                              single A000 或 tiled 0000 stream directory、         缀和 JPEG-XS-like SOC/CAP marker、
+                              tile/strip 尺寸匹配。                                   HE/HE* Bp 分流。
+    熵码语法                      LLVC3 group/component packet、width state、 precinct header、                                         未生成。
+                              zero run、magnitude/sign 记录、packet rows 和           GCLI/significance/coeﬀicient/sign substreams、
+                              guarded height。                                    predecessor state、precinct reset。
+    扫描/分组                     Sony 私有 group0/1/2/3、tile 高 3336                   18 precinct/tile、32 stripes、tile overflow carry、 未生成。
+                              guard/padded rows、final green 特殊合成。                GTLI/GCLI subband organization。
+    量化/侧信息                    私有码率/selector/packet 参数仍需从解码路径反推； Bp/Br/Dpb/GTLI/GCLI 可由 #826 语法描述，                                部分代理。
+                              当前只知道可闭合的绿色/残差代数结构。                                但代理未实现 bit-plane truncation。
+    LUT/码域                    12-bit internal code、Sony 4096-entry LUT、          #826 IQX/IQP 256-breakpoint tone LUT 已提         两侧 LUT/码域均已进
+                              R/B predictor 前 final green clamp；编码端需在            取并 materialize 为 81792-entry sample14 LUT； 入当前代理；真实
+                              该 code domain 中分配误差。                               GCLI prediction LUT 还会影响                        writer 仍未生成。
+                                                                                 coeﬀicient/significance 熵码状态；HE/HE* 变体
+                                                                                 还需 reference 验证。
+    可被 decoder 直接读取           需要真实 ARW6 strip/preamble/packets，随后                需要真实 HE precinct stream，随后 #826                 尚不能。
+                              #824 sony_arw6_load_raw() 可走完整路径。                  nikon_he_load_raw() 可走完整路径。
+
+
+
+
+图 11. L2.5 合并编码层代理模拟。青色柱为加入 scan/run、side-info、header 和 LUT 代理后的 coded proxy bpp 中位差；红色柱为 state side-info 中位
+差；灰色柱为原变换符号熵差；蓝线为整体 峰值信噪比差。差值均为 Sony-like 减 Nikon-like。
+
+
+
+
+                                                                            表 VIII
+                                                                   L2.5 合并编码层代理模拟摘要
+
+    目标 bpp     coded proxy bpp 差    变换熵差       state side-info 差   峰值信噪比差        Sony 低 coded bpp 数
+
+         1.5          +1.024315    -0.005752         +0.256683       -5.831 dB                  0/24
+         2.0          +1.224264    -0.001606         +0.274139       -5.684 dB                  0/24
+         2.5          +1.408978    -0.000648         +0.247486       -3.630 dB                  0/24
+         3.0          +1.491251    -0.001106         +0.184515       -5.081 dB                  0/24
+         4.0          +2.617910    -0.000363         +0.183212       -6.993 dB                  0/24
+         5.0          +2.978025    -0.000511          -0.029669      -8.385 dB                  0/24
+
+
+
+
+8                                                                      APHI Magazine                                                        2026 年 6 月
+                                                          虚拟四平面 RGGB 同源代理压缩基准
+
+
+                                                                        表 IX
+                                                     变换层效率与 #824/#826 可解码接入的合并对比
+
+    评价层                     Sony-like / #824 方向                            Nikon-like / #826 方向                                合并判断
+
+    变换/量化代理效率               final 结果中整体中位 峰值信噪比不占优；Sony actual             #826-like step1/step2 + CDF 5/3 + tone LUT 码        Nikon-like 中位
+                            bpp 只略低。                                       域后，整体中位 峰值信噪比占优。                                    占优。
+    L2.5 编码层模拟              加入 LLVC3-like adaptive                         Bp/Br/GTLI/GCLI significance/data/sign syntax 当前 L2.5 模型中
+                            width/zero-run/magnitude/sign syntax、          与已提取 tone LUT 进入模型后，coded proxy bpp 中 Nikon-like 占优。
+                            packet/header 和 Sony LUT code-domain 后，        位更低；但 precinct writer 仍未生成。
+                            coded proxy bpp 中位比 Nikon-like 高约 1.02–2.98
+                            bpp。
+    反向闭合                    码域代数闭合；sample 域受 LUT 投影限制，max                  码域代数闭合；sample 域受 LUT 投影限制，max                       两者均为 LUT
+                            residual 为 12 samples。                         residual 为 1 sample。                                投影受限。
+    LUT/码域接近度               Sony 4096-entry LUT、12-bit code domain、final   Nikon 256-breakpoint IQX/IQP tone LUT 已提取， 两者都有具体
+                            green clamp 已有本地解码和逆 LUT 工具证据；编码端 81792-entry sample14 LUT 已进入代理；                                  LUT 约束；
+                            必须在 LUT 前 code domain 中控制误差。                   GCLI/GTLI 状态也已进入 L2.5。                              Nikon LUT 不
+                                                                                                                               再是缺项。
+    真实码流语法                  缺 LLVC3 entropy packet writer、stream directory、缺 JPEG-XS-like precinct writer、                     两者均未达成。
+                            tile guard/padding 和 header writer。            GCLI/GTLI/coeﬀicient/sign entropy writer 和 HE
+                                                                           marker/container writer。
+    几乎可直接解码形态               若补齐 LLVC3 packet writer 和 ARW6 container，      若补齐 precinct entropy writer、HE                      两侧瓶颈都转移
+                            可望接入 #824；颜色/残差方程已有较强对应。                       marker/container 和 per-file variant 验证，可望接入 到真实 writer。
+                                                                           #826；当前已是 step1/step2 + CDF 5/3 + tone
+                                                                           LUT 码域代理。
+
+
+相位压力场景仍可能偏向 Sony-like 绿色主干/残差代                                                 --width 512 --height 512 --levels 4 ^
+                                                                               --targets 1.5,2.0,2.5,3.0,4.0,5.0
+理。
+                                                                                   合并编码层代理模拟命令如下：
+          细节保持不是一个标量。正式比较使用 SSIM、
+        第五，
+                                                                           python tools\proxy_coding_layer_simulation.py ^
+MS-SSIM 和 GMSD，因为它们有明确的图像质量评价                                                  --out-dir out\proxy_four_plane_benchmark_final_20260603 ^
+文献来源；梯度、拉普拉斯、高频能量和 8x8 块误差只                                                    --width 512 --height 512 --levels 4 ^
+                                                                               --targets 1.5,2.0,2.5,3.0,4.0,5.0
+作为工程诊断，帮助定位边缘强度、细线、整体高频能
+                                                                               BD-rate 计算命令以 Sony-like 绿色主干/残差代理
+量和局部块状风险。                                                                  相对 Nikon-like 均衡四平面变换代理为方向，正值表示
+        第六，熵编码、系数扫描、量化表和 LUT 是完整                                           Nikon-like 均衡四平面变换代理更省码率：
+                                                                           set OUT=out\proxy_four_plane_benchmark_final_20260603
+编码性能的必要组成。#824 和 #826 中都能看出具体
+                                                                           python tools\compute_bd_rate.py ^
+LUT：Sony 侧是 12-bit code 到 sample 的 LUT 和 final-                                --metrics %OUT%\metrics.csv ^
+                                                                               --codec-a sony_like_green_residual_wavelet ^
+green clamp 码域，Nikon 侧是已提取的 IQX/IQP tone                                       --codec-b nikon_he_like_53_step2_gcli_proxy ^
+LUT 与 GCLI prediction LUT。本文已经在第三部分                                            --metric PSNR_raw ^
+                                                                               --group-field split ^
+把 Sony LLVC3-like syntax、Nikon Bp/Br/GTLI/GCLI                                 --out %OUT%\bd_rate_psnr.csv
+
+syntax、packet/header 和 LUT code-domain 纳入 L2.5
+                                                                           同一命令还对 MAE、MAX、ssim_mean、ms_ssim_mean、
+代理模拟；该模拟显示码流层 syntax 会显著改写第一
+                                                                           gmsd_mean             和     grad_psnr       重 跑， 低 优 指 标 加
+部分的变换层判断。因此 BD 码率差只能作为第一部分
+                                                                           --lower-is-better。
+变换/量化层指标，不能直接代表真实文件 bpp。                                                       图像资产命令如下：
+        第七，局部 ROI 是必要补充。整体 峰值信噪比、 python tools\make_proxy_latex_report_figures.py ^
+                                                                               --out-dir out\proxy_four_plane_benchmark_final_20260603 ^
+SSIM/MS-SSIM、GMSD 和 BD 码率差适合做编码器                                               --fig-dir docs\proxy-four-plane-latex-report\figures ^
+效率判断，但 RAW 后期常常发生暗部提亮、高光恢复、                                                    --seed 20260602
+
+局部锐化和颜色调整；这些操作会放大局部误差，因此                                                           LaTeX 编译命令如下：
+图6 到图10 比单一汇总表更接近实际风险判断。                                                   xelatex --disable-installer ^
+                                                                               -interaction=nonstopmode ^
+                                                                               -halt-on-error main.tex
+
+               VIII. 可复现性
+                                                                                   关 键 输 出 文 件 包 括 roundtrip_audit.csv、
+        主实验命令如下：
+                                                                           metrics.csv、same_rate_summary.csv、detail_
+python tools\proxy_four_plane_benchmark.py ^
+    --out-dir out\proxy_four_plane_benchmark_final_20260603 ^              summary.csv、source_delta_summary.csv、bd_rate_
+
+9                                                                   APHI Magazine                                                          2026 年 6 月
+                                    虚拟四平面 RGGB 同源代理压缩基准
+
+
+*.csv、coding_layer_simulation.csv、coding_         面变换代理因为已进入 #826 step1/step2、CDF 5/3、
+layer_summary.csv、coding_layer_component_         Bp/Br/GTLI/GCLI 和已提取 IQX/IQP tone LUT，在
+summary.csv   和    coding_layer_manifest.json。 中位质量、BD-rate 和 L2.5 coded proxy bpp 上占优；但
+roundtrip_audit.csv 声 明 无 量 化 反 向 编 码 路 径 受       这仍不是 Nikon 真实量产 encoder 胜负，只是把下一步
+LUT 投影限制；coding_layer_manifest.json 声明            风险收敛到真实 precinct/container writer 和 reference
+第 三 部 分 L2.5 模 拟 的 decoder-visible syntax terms   compare。
+与非量产 encoder 证据等级；metrics.csv 还保留梯
+                                                                              参考文献
+度、拉普拉斯、高频能量和 8x8 块误差等工程诊断
+                                                  [1] B. E. Bayer, “Color imaging array,” U.S. Patent US3971065A, 1976.
+项，但它们不进入本文主比较表。本文全部图像位于
+                                                     Available: https://patents.google.com/patent/US3971065A/en
+docs/proxy-four-plane-latex-report/figures/。      [2] ITU-T, “Recommendation ITU-T J.340: Reference algorithm for
+                                                     computing peak signal to noise ratio of a processed video sequence
+                                                     with compensation for constant spatial shifts, constant temporal
+                   IX. 限制
+                                                     shift, and constant luminance gain and offset,” 2010. Available:
+
+     本文不能替代真实相机编码器基准。真实 Nikon                        https://www.itu.int/rec/T-REC-J.340-201006-I
+                                                  [3] M. J. Weinberger, G. Seroussi, and G. Sapiro, “The LOCO-I lossless
+HE 和 Sony CRAW HQ 可能包含不同预测器、分块策
+                                                     image compression algorithm: Principles and standardization into
+略、熵编码、系数扫描、量化表、LUT、硬件约束、色                            JPEG-LS,” IEEE Transactions on Image Processing, vol. 9, no. 8,
+                                                     pp. 1309–1324, 2000. Available: https://shiftleft.com/mirrors/www.
+彩管理、黑白电平处理、坏点/光学黑区处理和文件容
+                                                     hpl.hp.com/research/info_theory/loco.html
+器开销。本文的反向编码实现只证明两个数学代理与其                          [4] Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, “Im-
+声明的解码路径互逆到当前码域/LUT 投影精度，不证                           age quality assessment: From error visibility to structural simi-
+                                                     larity,” IEEE Transactions on Image Processing, vol. 13, no. 4,
+明它们等于厂商私有 encoder；第三部分虽然加入 L2.5
+                                                     pp. 600–612, 2004. Available: https://ece.uwaterloo.ca/~z70wang/
+编码层代理模拟，但它仍不是真实 bitstream。本文也                        publications/ssim.html
+没有使用真实传感器 RAW 样本库，而是使用确定性合                        [5] Z. Wang, E. P. Simoncelli, and A. C. Bovik, “Multiscale struc-
+                                                     tural similarity for image quality assessment,” in Proc. Asilomar
+成输入来覆盖压力模式。因此，本文可以支持“结构取
+                                                     Conference on Signals, Systems and Computers, 2003. Available:
+舍”和“编码层风险排序”的判断，但不能宣布真实厂                             https://www.cns.nyu.edu/~lcv/pubs/makeAbs.php?loc=Wang03
+商编码器胜负。本文没有把缺乏直接文献来源的工程诊                          [6] W. Xue, L. Zhang, X. Mou, and A. C. Bovik, “Gradient magnitude
+                                                     similarity deviation: A highly eﬀicient perceptual image quality
+断量当作主比较项；这些量只用于解释图像局部现象。
+                                                     index,” IEEE Transactions on Image Processing, vol. 23, no. 2, pp.
+     下一步若要升级到 L1 证据，需要同一传感器或                         684–695, 2014. Available: https://live.ece.utexas.edu/publications/
+同一原始四平面源输入，经真实编码器产生输出，并                              2014/GMSD.pdf
+
+在严格同码率或可控码率设置下评价。若无法获得官
+方编码器，至少应先把 L2.5 代理 encoder 扩展到可由
+#824/#826 读取的 bitstream：真实写出熵编码、系数
+扫描、量化表、LUT/码域、tile header 和容器开销，再
+加入更大的真实 RAW 统计库，验证当前合成压力场景
+是否覆盖真实相机噪声、镜头阴影、色彩滤光片串扰和
+高光饱和模式。
+
+
+                   X. 结语
+
+     本报告把原来的全局数学代理实验扩展为包含解
+码路径反向编码实现、LUT 投影审计、码流层缺口矩
+阵、L2.5 合并编码层代理模拟、指标来源审计、统计
+图、等质量码率曲线解释、场景级排序、提亮 ROI 截
+图和纯细节响应截图的中文 LaTeX 技术报告。最终判
+断保持克制：在当前 final 代理下，Nikon-like 均衡四平
+
+10                                        APHI Magazine                                                    2026 年 6 月
+                                                      虚拟四平面 RGGB 同源代理压缩基准
+
+
+ [7] G. Bjøntegaard, “Calculation of average PSNR differences between
+     RD-curves,” ITU-T VCEG-M33, 2001. Available: https://eclass.
+     uoa.gr/modules/document/file.php/D221/%CE%A3%CE%B7%
+     CE%BC%CE%B5%CE%B9%CF%8E%CF%83%CE%B5%CE%
+     B9%CF%82/VCEG-M33%20%28Bjontegaard%20Delta%29.pdf
+ [8] M. Mozhaev, A. Ignatov, R. Timofte, and L. Van Gool, “Compres-
+     sion for Bayer CFA images: Review and performance comparison,”
+     Sensors, vol. 22, no. 21, 8362, 2022. Available: https://www.mdpi.
+     com/1424-8220/22/21/8362
+ [9] A. Skodras, C. Christopoulos, and T. Ebrahimi, “The JPEG 2000
+     still image compression standard,” IEEE Signal Processing Maga-
+     zine, vol. 18, no. 5, pp. 36–58, 2001.
+[10] D. S. Taubman and M. W. Marcellin, “JPEG2000 image compres-
+     sion for medical imaging,” Medical Imaging 2006: Image Processing,
+     2006. Available: https://pubmed.ncbi.nlm.nih.gov/17281053/
+[11] Jiangtherapee Sony CRAW HQ decoder workspace, “Virtual four-
+     plane RGGB proxy benchmark outputs,” local repository output
+     files under out/proxy_four_plane_benchmark_final_20260603/,
+     2026.
+
+
+
+
+11                                                              APHI Magazine   2026 年 6 月
+

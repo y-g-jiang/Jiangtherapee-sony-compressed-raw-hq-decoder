@@ -6,19 +6,31 @@ venv/
 
 out/
 logs/
+tmp_*/
 *.log
 *.tmp
 
 # Camera inputs and generated decoder outputs
 *.ARW
 *.arw
+*.NEF
+*.nef
 *.raw
 *.dng
 *.DNG
+*.pgm
+*.ppm
+*.jpg
+*.jpeg
 *.tif
 *.tiff
 *.png
 *.asm
+
+# Rendered reports and LaTeX build products
+*.pdf
+*.aux
+*.out
 
 # Keep the small checked-in LUT artifact, but avoid accidental plane dumps.
 *.bin

@@ -1,0 +1,25 @@
+{
+  "source_header": "C:\\Users\\\u59dc\u5c27\u8015\\AppData\\Local\\Temp\\libraw_pr826_nikon_he\\src\\decoders\\nikon_he\\nikon_he_iqx_iqp_lut_data.h",
+  "breakpoint_count": 256,
+  "lut_size": 81792,
+  "first_breakpoint": [
+    0,
+    0
+  ],
+  "last_breakpoint": [
+    81791,
+    65534
+  ],
+  "lut_i32_min": 0,
+  "lut_i32_max": 65534,
+  "sample14_min": 0,
+  "sample14_max": 16383,
+  "monotone_i32": true,
+  "monotone_sample14": true,
+  "outputs": {
+    "breakpoints": "tools\\data\\nikon_he_iqx_iqp_breakpoints.tsv",
+    "lut_i32_bin": "tools\\data\\nikon_he_iqx_iqp_lut81792_i32.bin",
+    "lut_sample14_u16_bin": "tools\\data\\nikon_he_iqx_iqp_lut81792_sample14_u16.bin",
+    "lut_tsv": "tools\\data\\nikon_he_iqx_iqp_lut81792.tsv"
+  }
+}

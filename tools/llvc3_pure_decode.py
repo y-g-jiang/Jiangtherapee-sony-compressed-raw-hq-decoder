@@ -492,17 +492,34 @@ def decode_to_files(
     if any(s.header.component_count != 3 for s in streams):
         raise ValueError(f"unexpected ARW6/LLVC3 component count in streams: {streams}")
     header = streams[0].header
-    stream_width = header.coded_width
-    stream_header_height = header.logical_height
-    tile_cols = raw_info.width // stream_width if stream_width else 0
-    tile_rows = raw_info.height // stream_header_height if stream_header_height else 0
-    if tile_cols * tile_rows != len(streams) or raw_info.width % stream_width or raw_info.height % stream_header_height:
-        raise ValueError(
-            "unsupported ARW6/LLVC3 stream tiling: "
-            f"raw={raw_info.width}x{raw_info.height}, stream={stream_width}x{stream_header_height}, count={len(streams)}"
-        )
     if raw_info.width % 16 or raw_info.height % 16:
         raise ValueError(f"decoder expects dimensions divisible by 16, got {raw_info.width}x{raw_info.height}")
+    for s in streams:
+        if s.tile_x < 0 or s.tile_y < 0:
+            raise ValueError(f"stream {s.index} has negative tile position {s.tile_x},{s.tile_y}")
+        if s.tile_width != s.header.coded_width or s.tile_height != s.header.logical_height:
+            raise ValueError(
+                f"stream {s.index} tile entry {s.tile_width}x{s.tile_height} "
+                f"does not match coded {s.header.coded_width}x{s.header.logical_height}"
+            )
+        if s.tile_x + s.tile_width > raw_info.width or s.tile_y + s.tile_height > raw_info.height:
+            raise ValueError(
+                f"stream {s.index} tile {s.tile_x},{s.tile_y} "
+                f"{s.tile_width}x{s.tile_height} exceeds raw {raw_info.width}x{raw_info.height}"
+            )
+    ys = sorted({s.tile_y for s in streams})
+    for y in ys:
+        row_streams = sorted((s for s in streams if s.tile_y == y), key=lambda s: s.tile_x)
+        cursor = 0
+        row_height = row_streams[0].tile_height if row_streams else 0
+        for s in row_streams:
+            if s.tile_x != cursor or s.tile_height != row_height:
+                raise ValueError(f"unsupported ARW6/LLVC3 stream tiling near stream {s.index}")
+            cursor += s.tile_width
+        if cursor != raw_info.width:
+            raise ValueError(f"tile row y={y} covers width {cursor}, expected {raw_info.width}")
+    tile_cols = max((sum(1 for s in streams if s.tile_y == y) for y in ys), default=0)
+    tile_rows = len(ys)
 
     t0 = time.perf_counter()
     if use_sample_lut and sample_lut_path is None and DEFAULT_SAMPLE_LUT.exists():
@@ -648,11 +665,17 @@ def decode_to_files(
         "tile_layout": {
             "columns": tile_cols,
             "rows": tile_rows,
-            "tile_width": stream_width,
-            "tile_header_height": stream_header_height,
+            "tile_widths": sorted({int(s.tile_width) for s in streams}),
+            "tile_header_heights": sorted({int(s.tile_height) for s in streams}),
             "decoded_tile_height": raw.shape[0] // tile_rows,
         },
         "blue_edge_fix": blue_edge_fix,
+        "decoded_output_levels": {
+            "black_level": int(black),
+            "white_level": int(white),
+            "source_sony_tag_0x7310_black_level": raw_info.black_level_tag_0x7310,
+            "shifted_compat_black_level": int(shifted_black),
+        },
         "tile_edge_mitigation": tile_edge_mitigation,
         "native_edge_oracle": native_edge_oracle,
         "sample_lut": {

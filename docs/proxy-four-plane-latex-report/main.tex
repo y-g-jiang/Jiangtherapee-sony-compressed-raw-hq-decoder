@@ -1,0 +1,574 @@
+% !TeX program = xelatex
+\documentclass[journal]{IEEEtran}
+\usepackage[UTF8,fontset=windows]{ctex}
+\usepackage{iftex}
+\ifPDFTeX
+  \errmessage{This report must be compiled with XeLaTeX}
+\fi
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{graphicx}
+\usepackage{url}
+\usepackage{hyperref}
+\hypersetup{hidelinks}
+\usepackage{fancyhdr}
+\usepackage{amsmath}
+\usepackage{placeins}
+\usepackage{xcolor}
+\usepackage{dblfloatfix}
+
+\graphicspath{{figures/}}
+\setlength{\tabcolsep}{3.5pt}
+\renewcommand{\arraystretch}{1.08}
+\emergencystretch=2em
+\sloppy
+\flushbottom
+\setcounter{topnumber}{4}
+\setcounter{bottomnumber}{4}
+\setcounter{totalnumber}{8}
+\setcounter{dbltopnumber}{4}
+\renewcommand{\topfraction}{0.95}
+\renewcommand{\bottomfraction}{0.90}
+\renewcommand{\dbltopfraction}{0.95}
+\renewcommand{\textfraction}{0.05}
+\renewcommand{\floatpagefraction}{0.75}
+\renewcommand{\dblfloatpagefraction}{0.75}
+\setlength{\textfloatsep}{6pt plus 1pt minus 1pt}
+\setlength{\dbltextfloatsep}{6pt plus 1pt minus 1pt}
+\setlength{\floatsep}{6pt plus 1pt minus 1pt}
+\setlength{\intextsep}{6pt plus 1pt minus 1pt}
+\setlength{\abovecaptionskip}{3pt}
+\setlength{\belowcaptionskip}{0pt}
+
+\newcommand{\StrictDir}{\path{out/strict_824_826_math_eval_full_20260603}}
+\newcommand{\InsightDir}{\path{out/strict_824_826_math_insight_20260603}}
+\newcommand{\AuditFile}{\path{out/strict_824_826_encoder_reversibility/audit.json}}
+\newcommand{\MetricValidationFile}{\path{out/strict_824_826_metric_validation/metric_reference_validation.json}}
+\newcommand{\BitstreamClosureFile}{\path{out/strict_824_826_minimal_bitstream_closure/bitstream_closure.json}}
+\newcommand{\ProductionFitDir}{\path{out/production_fit_samples}}
+\newcommand{\SonyStreamFitDir}{\path{out/sony_stream_fitted_selector_eval_20260604}}
+\newcommand{\NightlyWideDir}{\path{out/nightly_codec_ctc_20260605}}
+\newcommand{\SonyStrict}{Sony \#824 decoder-visible canonical}
+\newcommand{\NikonStrict}{Nikon \#826 decoder-visible canonical}
+\newcommand{\SonyReal}{Sony \#824 ARW6/LLVC3}
+\newcommand{\NikonReal}{Nikon \#826 HE}
+
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[C]{strict \#824/\#826 解码器可见编码器反推性能评价}
+\fancyfoot[L]{\thepage}
+\fancyfoot[C]{\textrm{APHI Magazine}}
+\fancyfoot[R]{2026 年 6 月}
+\renewcommand{\headrulewidth}{0.4pt}
+\renewcommand{\footrulewidth}{0pt}
+
+\title{strict \#824/\#826 解码器可见编码器反推性能评价：\\
+同源 RAW、多指标、码流语法、BD-rate 与文献体系综合报告}
+\author{姜尧耕 \quad Codex 协作实验记录}
+\date{2026-06-04}
+
+\begin{document}
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+本文重写旧 11 页评价报告，但主数据替换为 strict \#824/\#826 编码器反推批次。评估对象不是相机厂商私有 production encoder，而是从 \SonyReal{} 与 \NikonReal{} 解码器中可审计地反推出的 decoder-visible canonical encoder。主实验目录为 \StrictDir{}：24 个确定性同源合成 RGGB 场景、256$\times$256 马赛克、三层变换、6 个目标请求 bpp、两条 canonical 路径、288 次编码、7488 条质量指标、288 条 syntax 记录和 48 条零量化 roundtrip 审计记录。\InsightDir{} 进一步拆出 component/LUT 投影、变换 roundtrip、系数量化/反量化、VIF-style 信息保真、残差结构、高频误差能量、相位不均衡和局部 RD 斜率。结果显示，whole PSNR 的等质量 BD-rate 在可计算 11/24 个场景上为 \NikonStrict{} 相对 \SonyStrict{} 中位 +4.758\%。系数域 SNR 的等质量 BD-rate 在 11/24 个场景上为 +66.045\%，VIF-style 信息保真的等质量 BD-rate 在 7/24 个场景上为 +41.731\%；这两项只作为解释性指标，不作为 production encoder 证明。同目标请求下，\NikonStrict{} 在 1.5、2.0、2.5、4.0 和 5.0 bpp 请求点的 whole PSNR 中位值更高；\SonyStrict{} 在 3.0 bpp 点更高，并在 1.5 到 3.0 bpp 请求段更贴近目标码率。4.0 和 5.0 bpp 请求点上，Sony canonical 路径出现约 3.6946 bpp 的实际码率平台，因此这些高码率点不能按同实际码率比较。新增真实码流 production-fit audit 显示，公开 Sony HQ 样张位于 4.468/4.762 bpp，Nikon Z8 HE 支持路径为 3.000 bpp/Bp=4，Z8 5.000 bpp/Bp=2 属于当前 \#826 unsupported HE* 边界。本文支持的结论是 decoder-visible canonical simulation 已形成可审计证据链；它不支持 production encoder equivalence claim，也不支持把任一真实相机编码器判定为无条件胜者。
+\end{abstract}
+
+\begin{IEEEkeywords}
+RAW compression, RGGB, Bayer, LibRaw, Sony ARW6, Nikon HE, BD-rate, SSIM, MS-SSIM, GMSD, VIF-style, RD slope, stage-separated evaluation, decoder-visible canonical simulation
+\end{IEEEkeywords}
+
+\section{结论先行}
+
+本稿把“大报告”的评价框架和 strict 数据源合并在一起。旧大报告留下的是方法骨架：同源输入、多目标码率、率失真曲线、BD-rate、结构质量、ROI、码流语法、roundtrip 和证据边界必须一起出现。本文保留这套骨架，主数据改用 \StrictDir{} 与 \AuditFile{}，不再引用旧代理实验作为结论来源。
+
+按 BD-rate 的机器定义，\texttt{codec\_a} 为 \NikonStrict{}，\texttt{codec\_b} 为 \SonyStrict{}。正值表示 \NikonStrict{} 为达到同等质量需要更多实际 syntax bpp。whole PSNR 的中位 BD-rate 为 +4.758\%，但只有 11/24 个场景存在共同质量区间，分位区间也很宽。这不是“Sony 真实编码器已经胜出”的证据，只能说明 strict canonical 条件下可积分子集的等质量率失真方向。另一张表回答的是同目标请求问题：\NikonStrict{} 在 1.5、2.0、2.5、4.0、5.0 bpp 请求点的 whole PSNR 中位值高于 \SonyStrict{}，\SonyStrict{} 在 3.0 bpp 点更高。等质量和同请求是两件事。不能互相替代。
+
+图\ref{fig:structure} 给出本文比较的两条路径。上支路是 \SonyReal{} 解码器可见的 LUT code domain、final-green 与 R/B residual 关系、packet selector、adaptive width、zero-run 和 sign syntax。下支路是 \NikonReal{} 解码器可见的 sample14 LUT、step1/step2 Bayer 关系、CDF 5/3 系数、GTLI/GCLI、bit-plane magnitude 和 sign syntax。本文评价的是这些可见结构能反推出的 canonical encoder，而不是厂商相机内部的 RD 搜索和模式选择。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_strict_structure.png}
+\caption{strict \#824/\#826 decoder-visible canonical encoder 结构。两条路径共享同源 RGGB 输入，但只使用解码器暴露出的语法、LUT 和逆变换关系。}
+\label{fig:structure}
+\end{figure*}
+
+\section{证据等级}
+
+表\ref{tab:evidence} 给出本文采用的证据等级。最强结论来自同源、多目标、可复现、可审计的 strict canonical 输出；最弱结论是公开样片或单文件大小描述。本文不把后者提升为编码效率证据。
+
+\begin{table}[!t]
+\centering
+\caption{证据等级与本文状态}
+\label{tab:evidence}
+\begin{tabularx}{\linewidth}{p{0.13\linewidth}X}
+\toprule
+等级 & 状态与含义\\
+\midrule
+L1 & 未达到。没有厂商 production encoder，不能证明真实 Sony/Nikon 相机编码器的最终胜负。\\
+L2 & 达到。strict canonical encoder 使用同源合成 RAW、多目标请求和实际 syntax bpp。\\
+L3 & 达到。语法项来自 decoder-visible packet、selector、GTLI/GCLI、LUT 和 sign/data 关系。\\
+L4 & 部分达到。roundtrip、manifest、CSV、BD-rate、stage-separated insight eval、metric reference validation 和 minimal core bitstream closure 可复现；PDF 页数检查依赖外部 \texttt{pdfinfo}，外部 LibRaw 源码快照仍需随 artifact 一并固定。\\
+边界 & 允许 decoder-visible canonical simulation；禁止 production encoder equivalence claim。\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+这种等级划分与 codec 文献中的基本习惯一致：单一 PSNR 或单一文件大小不能代表编码器性能；同源输入、多码率曲线、BD-rate、感知结构指标、信息保真指标、局部 RD 斜率和复杂度/语法成本需要同时报告。本文还额外要求列出不可由解码器唯一决定的 encoder RD policy。
+
+\section{strict 反推审计}
+
+\AuditFile{} 对 \SonyReal{} 和 \NikonReal{} 的可反推项做了逐项分类。结果是 exact reverse 8 项、canonical choice 2 项、not decoder determined 2 项。exact reverse 表示解码器已显式暴露语法或逆数学关系；canonical choice 表示可以构造合法 canonical 写法，但真实相机选择仍需验证；not decoder determined 表示解码器不可能唯一推出厂商 RD 搜索策略。
+
+\begin{table}[!t]
+\centering
+\caption{strict \#824/\#826 反推审计摘要}
+\label{tab:audit}
+\begin{tabular}{lc}
+\toprule
+审计项 & 数量或状态\\
+\midrule
+exact reverse & 8\\
+canonical choice & 2\\
+not decoder determined & 2\\
+允许 decoder-visible canonical simulation & true\\
+允许 production encoder equivalence claim & false\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Sony 路径可反推 stream/tile directory、packet record、selector、adaptive width、zero-run、4-lane magnitude/sign、hierarchical synthesis 和 final green/RB relation。Nikon 路径可反推 precinct header、Bp/Br/Dpb/LB sizes、GCLI/GTLI、coefficient magnitude/sign bit-plane、dequantization、tile orchestration、step1/step2 Bayer reconstruction 和 sample14 LUT 投影。两者都不能由解码器推出真实相机的目标码率控制策略。
+
+当前审计文件记录了外部源码 SHA256，但仅有 hash 还不够。正式 artifact 需要同时固定对应源码快照、patch 或 commit 引用，并让 verifier 在当前工作目录下验证这些文件。否则换机后只能确认本文使用过某组 hash，不能确认审稿人手里的源码就是同一组文件。
+
+\subsection{真实码流锚点与 production-fit audit}
+
+为避免 canonical 选择看起来像任意挑选，我把公开 raw.pixls.us 样张和本地负样本加入独立的 production-fit audit。并行探测脚本 \texttt{probe\_production\_fit\_samples.py} 用 \texttt{--jobs 15} 跑完 11 个 ARW/NEF 输入；输出写入 \ProductionFitDir{}。其中 Sony 两个公开 HQ ARW 均为 single-stream LLVC3，13 个 packet，packet type 分布为 \texttt{\{"1":4,"3":9\}}，group entry pattern 为 \texttt{[3,3,3,3,1]}，packet validation 全通过。Nikon Z8 HE low 探到 3.000 bpp、first precinct Bp=4，属于当前 \#826 支持路径；Z8 high/HE* 探到 5.000 bpp、Bp=2，属于当前 \#826 显式 unsupported 路径。本地 7 个 Z7 II NEF 不是 JPEG-XS HE marker，作为“不能误进 HE decoder”的负样本。
+
+\begin{table}[!t]
+\centering
+\caption{真实码流锚点，来自 \ProductionFitDir{}/\texttt{real\_bitstream\_controls.csv}}
+\label{tab:real-anchors}
+\begin{tabularx}{\linewidth}{lccX}
+\toprule
+样张或类别 & bpp & 控制量 & 解释\\
+\midrule
+Sony A7M5 full HQ & 4.468 & 13 pkt, selector mean 0.742 & 真实 HQ full-frame single stream\\
+Sony A7M5 APS-C HQ & 4.762 & 13 pkt, selector mean 0.742 & 真实 HQ crop single stream\\
+Nikon Z8 HE low & 3.000 & Bp=4 & 当前 \#826 支持路径锚点\\
+Nikon Z8 HE high/HE* & 5.000 & Bp=2 & 当前 \#826 unsupported 边界\\
+Z7 II 本地 NEF & 14.008 & no JPEG-XS marker & 负样本，不能误进 HE\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+\texttt{production\_fit\_policy\_audit.csv} 再把 strict rate 点与这些真实锚点对齐。结果只有 Nikon 3.0 target 的实际 3.071 bpp 接近 Z8 HE Bp=4 支持路径；Nikon 5.0 target 的实际 4.768 bpp 接近 Z8 5 bpp/Bp=2，但这是 HE* unsupported 边界；Sony strict canonical 的 4.0/5.0 target 平台仍只有约 3.695 bpp，离下载的 HQ 样张至少 0.773 bpp。这个审计不会证明谁更强，却把“哪些 target 有真实码流锚点、哪些只是 canonical 数学点”分清了。
+
+\subsection{指标与最小码流闭环}
+
+\MetricValidationFile{} 用确定性测试向量检查评价指标实现。该 gate 对 PSNR/MSE/MAE/MAX 使用闭式公式 oracle，对 GMSD 使用独立 Prewitt/GMSD 公式 oracle，并把 SSIM/MS-SSIM 的 SciPy 卷积路径与脚本内置 no-SciPy fallback 交叉比较；输出记录文献来源、峰值范围、测试用例、容差和全部误差。当前结果为 3 个 case、24 个 check 全部通过，最大绝对差异约 $8\times10^{-6}$。
+
+\BitstreamClosureFile{} 给出 minimal core bitstream closure：脚本实际写出 Sony \#824 LLVC3 最小 stream header、directory 和 type-1 packet records，以及 Nikon \#826 HE 最小 precinct header、LB0 GCLI/data/sign substreams；随后用对应 decoder-visible parser/entropy/dequant 逻辑回读，并逐项比较系数、GCLI、bit-plane、sign 和 dequantization 结果。该闭环的边界同样写入 JSON：它表明核心语法 bytes 可写可读，但 \emph{不} 声称已经生成完整 Sony ARW 或 Nikon NEF 容器，也不允许 production encoder equivalence claim。
+
+\section{实验设置}
+
+表\ref{tab:setup} 给出 strict 批次的硬设置。评估脚本按 scene 分配进程池任务；主评估与 insight 评估 manifest 均记录 \texttt{jobs=24}。\texttt{metrics.csv} 包含 PSNR、MAE/MAX、SSIM、MS-SSIM、GMSD 等 7488 条质量指标；\InsightDir{} 另含 3504 行分层指标、3168 行数学洞见指标，并把合并结果写入 \texttt{combined\_big\_comparison.csv}。
+
+\begin{table}[!t]
+\centering
+\caption{strict 批次设置，来自 \texttt{manifest.json}}
+\label{tab:setup}
+\begin{tabularx}{\linewidth}{p{0.34\linewidth}X}
+\toprule
+项目 & 数值\\
+\midrule
+目录 & \StrictDir{}\\
+输入 & 24 个确定性合成 RGGB 场景\\
+RAW 尺寸 & $256\times256$ 马赛克，即四个 $128\times128$ 相位平面\\
+目标请求 bpp & 1.5、2.0、2.5、3.0、4.0、5.0\\
+变换层数 & 3\\
+随机种子 & 20260603\\
+编码行数 & 288\\
+质量指标行数 & 7488\\
+syntax 行数 & 288\\
+roundtrip 行数 & 48\\
+分层/洞见行数 & 3504 stage，3168 insight\\
+Nikon LUT & \texttt{sample14}，\texttt{kMidpointScaleTable}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+场景覆盖 smooth gradient、fine texture、color edges、highlight rolloff、shadow noise、green phase alias、decorrelated color、slanted edge、thin black lines、zone plate、nyquist checker、micro contrast、random foliage、color checker、specular grid、shadow fabric、chroma noise、bayer phase steps、tile boundary stress、skin-like smooth、low contrast detail、high ISO texture、red/blue fine text 和 blue-channel detail。
+
+\section{评价指标}
+
+表\ref{tab:metrics} 汇总本报告使用的文献评价项。PSNR 与 MAE/MAX 衡量 RAW sample 域误差；SSIM、MS-SSIM 和 GMSD 补充结构相似性；梯度 PSNR 与 Laplacian MAE 捕捉细节边缘；BD-rate 只在同一 source、两条曲线有共同质量区间时计算。
+
+\begin{table*}[!t]
+\centering
+\caption{正式评价项与用途}
+\label{tab:metrics}
+\begin{tabularx}{0.96\textwidth}{p{0.19\textwidth}Xp{0.18\textwidth}}
+\toprule
+项目 & 用途 & 本文证据\\
+\midrule
+实际 bpp 与目标请求 & 区分 rate-control 行为和实际 syntax 成本，避免只看 requested target。 & \texttt{rate\_summary.csv}\\
+PSNR/MSE & RAW sample 域均方误差评价，峰值范围使用黑电平 512 到白电平 16383。 & \texttt{metrics.csv}\\
+MAE/MAX & 平均绝对误差和最坏点风险，适合检查近无损和局部离群。 & \texttt{metrics.csv}\\
+R/G0/G1/B 分相位 & 防止 whole 指标掩盖 Bayer 相位、红蓝残差或绿相位风险。 & \texttt{bd\_rate\_psnr.csv}\\
+grad-PSNR/Laplacian MAE & 检查边缘、纹理、高频和局部结构误差。 & 目标摘要\\
+SSIM/MS-SSIM/GMSD & 结构相似性与梯度相似性，避免只依赖 sample 域误差。 & \MetricValidationFile{}\\
+VIF-style 信息保真 & 以 Sheikh--Bovik 信息保真思想为 RAW plane 上的透明代理实现，检查视觉信息通道而不是只看均方误差。 & \texttt{insight\_metrics.csv}\\
+变换能量集中 & 报告 LL 能量占比、LL/detail 能量比和系数绝对值 Gini，分离“变换是否压缩能量”与“量化是否损伤”。 & \texttt{stage\_metrics.csv}\\
+系数量化/反量化 & 报告 coeff SNR、coeff MAE、高频误差占比、零系数占比和 nonzero group 占比。 & \texttt{stage\_summary.csv}\\
+局部 RD 斜率 & 用相邻实际 bpp 的有限差分报告 MSE drop、PSNR/SSIM/VIF gain 和 GMSD drop，作为 RDO/Lagrange insight。 & \texttt{rd\_slope\_summary.csv}\\
+R-D-P 边界 & 使用 rate-distortion-perception 文献作为解释边界：感知或信息指标不能自动替代 RAW sample 正确性。 & 文献与边界段落\\
+BD-rate & 在共同质量区间积分，报告可计算样本数与分位区间。 & \texttt{bd\_rate\_*.csv}\\
+syntax 组成 & 检查 packet/header、selector、width、zero-run、GCLI、data、sign 等成本。 & \texttt{syntax\_summary.csv}\\
+ROI & 对暗部、高 ISO、亮部 rolloff、细线和红蓝细节做局部可视检查。 & strict 重建图\\
+\bottomrule
+\end{tabularx}
+\end{table*}
+
+本文 RAW PSNR 定义为
+\begin{equation}
+\mathrm{PSNR}_{raw}=10\log_{10}\frac{(W-B)^2}{\mathrm{MSE}},
+\end{equation}
+其中 $B=512$、$W=16383$。BD-rate 的机器方向固定为 \NikonStrict{} 相对 \SonyStrict{}，正值代表 \NikonStrict{} 需要更多实际 syntax bpp。局部 RD 斜率只用相邻实际码率点的有限差分
+\begin{equation}
+\Delta_D=\frac{D(r_i)-D(r_{i+1})}{r_{i+1}-r_i},\qquad
+\Delta_Q=\frac{Q(r_{i+1})-Q(r_i)}{r_{i+1}-r_i},
+\end{equation}
+其中 $D$ 为越低越好的失真项，$Q$ 为越高越好的质量项。它可借鉴 Lagrangian RDO 的数学洞见，但不反推出相机私有 $\lambda$ 或 mode decision。
+
+\section{roundtrip 闭合}
+
+strict 评估首先检查零量化或投影条件下的反向路径闭合。表\ref{tab:roundtrip} 与图\ref{fig:roundtrip} 显示，Nikon 路径的最大 roundtrip 残差为 1 DN，主要来自 sample14 LUT 的最近投影；Sony 路径最大为 12 DN，来自 4096-entry LUT 与 clamp/code-domain 投影。这些残差是 code-domain 到 sample-domain 的投影误差，不是目标码率量化误差。
+
+\begin{table}[!t]
+\centering
+\caption{零量化 roundtrip 审计}
+\label{tab:roundtrip}
+\begin{tabular}{lcc}
+\toprule
+路径 & median MAE & max abs\\
+\midrule
+\SonyStrict{} & 2.815 & 12\\
+\NikonStrict{} & 0.000153 & 1\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_roundtrip.png}
+\caption{零量化 roundtrip 投影误差。该图用于确认反推路径本身闭合，避免把 LUT 投影误差误写成压缩量化误差。}
+\label{fig:roundtrip}
+\end{figure}
+
+\section{变换与量化分层评价}
+
+\InsightDir{} 将编码链拆成三层：component/LUT 投影、CDF 5/3 变换 roundtrip、系数域量化/反量化。这样做的目的不是增加一个额外分数，而是防止把 LUT 投影、可逆变换数值误差和真正的系数量化误差混在一起。图\ref{fig:stage-separation} 给出核心摘要。
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_stage_separation.png}
+\caption{变换与量化分层评价。上图把 transform roundtrip 从量化误差中剥离；下图比较同目标请求下的系数域 SNR 与 MAE 差值，均为 Sony 减 Nikon。}
+\label{fig:stage-separation}
+\end{figure}
+
+变换 roundtrip 的中位 MAE 与 MAX 分别为：\SonyStrict{} 2.815 DN、10 DN，\NikonStrict{} 0.000153 DN、1 DN；这与零量化 roundtrip 一致，说明主要差异仍来自 LUT/code-domain 投影而不是 CDF 5/3 变换本身。能量集中方面，\SonyStrict{} 的 LL 能量中位占比为 0.956，\NikonStrict{} 为 0.862；LL/detail 能量比中位分别为 13.43 dB 与 7.95 dB。这说明当前 canonical 分量选择下 Sony 路径更容易把能量集中到低频系数，但这不是完整 encoder RD policy 的证明。
+
+系数量化/反量化层面，2.5 bpp 请求点的 coeff SNR 中位为 Sony 44.014 dB、Nikon 35.715 dB；3.0 bpp 点为 46.781 dB、36.802 dB；5.0 bpp 点为 49.103 dB、44.835 dB。coeff SNR 的等质量 BD-rate 在 11/24 个场景上为 \NikonStrict{} 相对 \SonyStrict{} +66.045\%。这只能说明当前 decoder-visible canonical 量化格点下 Sony 的系数域误差更小；Nikon 在若干 sample-domain PSNR 点仍然更高，说明变换、LUT、语法台阶和重建域误差不能互相替代。
+
+\section{实际 bpp 率失真结果}
+
+性能比较一律以 actual syntax bpp 为横轴。requested target bpp 只是 encoder 的 rate-control 输入或诊断标签，不能代表用户实际付出的空间成本。图\ref{fig:actual-bpp-canonical} 把 strict canonical 中位点画在实际 bpp 轴上：3.0 请求标签附近两条路径实际码率接近；4.0 请求标签下 \SonyStrict{} 的中位实际码率约 3.6946 bpp，而 \NikonStrict{} 约 3.9351 bpp；5.0 请求标签下 \SonyStrict{} 仍接近同一平台，\NikonStrict{} 则到约 4.7676 bpp。因此旧同请求表中的胜负翻转不能解释为同实际码率下的直接反转。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_actual_bpp_canonical_median_rd.png}
+\caption{strict canonical 中位 RD 轨迹。横轴为 actual syntax bpp；误差棒为 25--75 分位。请求标签仅标注点来源，不作为性能横轴。}
+\label{fig:actual-bpp-canonical}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_actual_bpp_policy_paired_delta.png}
+\caption{policy sweep 的 paired actual-bpp 上包络比较。每个 bin 只统计 \#824 与 \#826 同时覆盖的同一批场景；上图为 Sony best PSNR 减 Nikon best PSNR，下图为 paired coverage。}
+\label{fig:actual-bpp-policy-delta}
+\end{figure*}
+
+进一步的 frontier-level 数学评估写入 \NightlyWideDir{}。它仍只使用 actual syntax bpp 作为 rate 轴，但不再把 canonical 点当作唯一曲线：每个场景先从枚举 policy 中取 PSNR upper envelope，再计算 per-scene BD-rate、paired bootstrap 置信区间、actual-bpp bin 覆盖率和多指标 Pareto 支配关系。这更接近 codec 论文中 operational RD set、BD-rate 与统计摘要并列报告的习惯\cite{bd,bdbible,jxsbrummer}。nightly wide 评估请求 16 个 worker、10000 次 bootstrap；点云 manifest 记录 380928 个候选点，frontier manifest 记录 policy envelope 的 BD-rate 可计算场景为 24/24。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_nightly_wide_bd_rate_bootstrap_summary.png}
+\caption{nightly wide frontier-level BD-rate 摘要。方向为 Nikon 相对 Sony，正值表示 Nikon 在共同质量区间内需要更多 actual syntax bpp。policy PSNR envelope 的可计算场景为 24/24，高于 strict canonical 的 11/24；误差棒为 paired bootstrap 95\% CI。}
+\label{fig:frontier-bd-bootstrap}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_nightly_wide_paired_actual_bpp_delta_ci.png}
+\caption{nightly wide actual-bpp paired bins 的 upper-envelope 差值与 bootstrap CI。方向为 Sony best PSNR 减 Nikon best PSNR；4.0 和 5.0 actual-bpp bins 的中位差分别为 +4.059 dB 与 +7.326 dB，且 sign test 已显著偏向 Sony。1.5--2.5 bpp 的 CI 仍部分覆盖零，不能写成低码率稳定压制。}
+\label{fig:frontier-paired-ci}
+\end{figure*}
+
+该增强评估也改变了正文措辞：strict canonical whole-PSNR BD-rate 的中位数为 +4.758\%，但 95\% bootstrap CI 跨零；nightly wide policy PSNR envelope 的中位数为 +17.410\%，95\% CI 为 +10.239\% 到 +44.236\%，可计算场景 24/24。这里的结论不是“真实 Sony encoder 已胜出”，而是“在当前 decoder-visible wide policy grid 的 operational upper envelope 下，Sony 方向在可积分集合上更稳定”。按照 rate-distortion-perception 文献\cite{rdp,lpips}，PSNR frontier 仍不能替代 demosaic/ISP 后的感知质量、主观测试或生产编码器复杂度。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_nightly_wide_bpp_quality_point_cloud.png}
+\caption{nightly wide decoder-visible policy 点云。横轴为 actual syntax bpp，不含 target-bpp 横轴；每个点是一个 scene、policy、base-step 或 effective-GTLI 组合的重建质量。该图显示同一实际码率附近存在大量质量分叉，因此 canonical 曲线不能代表唯一编码解。}
+\label{fig:exhaustive-bpp-cloud}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.92\textwidth]{fig_nightly_wide_bpp_quality_envelope.png}
+\caption{nightly wide 点云按 actual-bpp bin 聚合后的逐场景 best-PSNR envelope。该点云包含 24 个场景、380928 个候选点；Sony 枚举 74 个 selector/row-cycle/component-map policy 和 48 个 base-step，Nikon 枚举 88 个 component-offset policy、7 个 global bias 和 20 个 GTLI/Bp/Br row。Nikon 在约 1.5 bpp 的覆盖子集上仍强，Sony 从约 2.5 bpp 后的中位上包络开始反超，并在 4--5 bpp 后明显更高。}
+\label{fig:exhaustive-bpp-envelope}
+\end{figure*}
+
+这轮点云遍历是对“bpp 是否唯一”的直接可视化。输出目录为 \path{out/nightly_codec_ctc_20260605/wide_effective_point_cloud}；manifest 记录 16 个 worker、380928 个候选点、耗时 1392.722 秒。Sony 点云的每场景 PSNR frontier 中位点数为 234.5，Nikon 为 39.5，说明 Sony 当前可见控制空间更连续，Nikon 更受 GTLI/Bp/Br 台阶约束。点云中的 Nikon 等效 GTLI 重建被缓存复用，因此它是 effective reconstruction cloud，不是逐个冗余 Bp/Br header-bit 的完全枚举；这一点不影响 bpp--质量形状判断，但不能写成生产编码器穷举。
+
+\begin{table*}[!t]
+\centering
+\caption{请求标签诊断表。该表只用于解释 rate-control 可达性，不作为性能横轴。}
+\label{tab:target-diagnostic}
+\begin{tabular}{ccccccc}
+\toprule
+请求标签 & Sony actual bpp & Nikon actual bpp & Sony PSNR & Nikon PSNR & PSNR diff & MAE diff\\
+\midrule
+1.5 & 1.4998 & 2.0060 & 52.736 & 55.777 & -3.041 & +5.376\\
+2.0 & 1.9988 & 2.1353 & 57.443 & 60.381 & -2.938 & +2.321\\
+2.5 & 2.4991 & 2.6151 & 60.848 & 61.868 & -1.020 & -0.209\\
+3.0 & 2.9982 & 3.0708 & 64.015 & 63.206 & +0.809 & -1.825\\
+4.0 & 3.6946 & 3.9351 & 66.767 & 68.325 & -1.558 & +0.469\\
+5.0 & 3.6946 & 4.7676 & 67.398 & 70.104 & -2.706 & +0.935\\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+表中 PSNR diff 和 MAE diff 均为 Sony 减 Nikon。它只说明某些请求标签对应的实际码率、质量和平台化现象；正式 RD 判断以图\ref{fig:actual-bpp-canonical}、图\ref{fig:actual-bpp-policy-delta}、BD-rate 和实际 bpp 上的 paired coverage 为准。
+
+\section{结构指标矩阵}
+
+图\ref{fig:metric-matrix} 把 PSNR、grad-PSNR、MAE、SSIM、MS-SSIM 和 GMSD 的同目标中位差放在同一热图中。该图的作用不是把所有指标硬合成一个分数，而是暴露指标之间的方向差异。SSIM/MS-SSIM 在 2.5 和 3.0 bpp 点偏向 Sony，在 4.0 和 5.0 bpp 点偏向 Nikon；GMSD 在 3.0 bpp 点偏向 Sony，在若干其他点偏向 Nikon。
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_metric_matrix.png}
+\caption{多指标中位差矩阵。数值为 Sony 减 Nikon，SSIM、MS-SSIM 和 GMSD 按 $10^4$ 缩放显示。}
+\label{fig:metric-matrix}
+\end{figure}
+
+这类指标差异说明，单一 PSNR 结论不够。对于 RAW 编码器反推评价，PSNR 可以作为主轴，但需要 MAE/MAX、结构相似性、梯度指标和 ROI 共同约束。
+
+\section{数学洞见指标}
+
+图\ref{fig:insight-metrics} 汇总 VIF-style 信息保真、残差邻域相关、高频误差能量、边缘误差相关和 Bayer 相位 MAE 离散度。VIF-style 指标借鉴 information fidelity/VIF 的高斯通道思想，但本文只把它实现为 RAW plane 上透明、可复现的解释性代理；它不等同于原论文完整 MATLAB VIF，也不替代 sample-domain 正确性。
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_insight_metrics.png}
+\caption{数学洞见指标矩阵。数值为 Sony 减 Nikon；VIF-style 越高越好，残差相关、高频误差能量和相位 MAE 离散度越低越好。}
+\label{fig:insight-metrics}
+\end{figure}
+
+在 2.5、3.0 和 5.0 bpp 请求点，VIF-style 信息保真中位分别为 Sony 0.999037/0.999541/0.999738，Nikon 0.994117/0.994699/0.997051。按同质量积分，VIF-style BD-rate 只有 7/24 个场景存在共同质量区间，中位为 +41.731\%。这说明该指标偏向 Sony canonical，但可计算覆盖较少，证据强度低于主 sample-domain 曲线。另一方面，高频误差能量占比在同三点上 Sony 明显高于 Nikon，说明 Sony 的误差更容易进入高频残差；Nikon 的残差邻域相关更高，说明误差更平滑或更结构化。这些方向差异正是 rate-distortion-perception 边界提醒的内容：不同数学投影回答不同问题，不能被合成成一个无条件胜负。
+
+图\ref{fig:rd-slope} 报告相邻实际 bpp 点的局部 RD 斜率。Sony 的中位 MSE drop、PSNR gain、VIF gain 和 GMSD drop 分别为 357.607、5.559、0.001839 和 0.000305；Nikon 分别为 114.781、4.134、0.000707 和 0.000117。由于 Nikon canonical 的 GTLI/GCLI row 是离散台阶，局部斜率段数少于 Sony；这些数值只能说明当前 canonical sweep 的边际收益形状，不能反推出厂商真实 Lagrangian $\lambda$。
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_rd_slope.png}
+\caption{局部 RD 斜率。斜率用相邻实际 bpp 的有限差分计算，用于观察边际码率收益，不代表相机私有 RDO 参数。}
+\label{fig:rd-slope}
+\end{figure}
+
+\section{码流语法与实际 bpp}
+
+Sony canonical 路径用 continuous base step 搜索，在低中码率段能较细地调节 actual bpp；高码率端则受当前 packet/selector/control 组合限制而出现平台。Nikon canonical 路径由有限 GTLI/GCLI 行和 Bp/Br 组合决定，actual bpp 呈台阶状。这个行为不是实现缺陷，而是 strict 反推模型的控制空间边界。用户关心的是实际占用空间和重建效果，所以主 RD 图不再使用 requested target bpp 作为横轴；requested target 只保留为 rate-control 可达性诊断字段。
+
+在 2.5 bpp 请求点，\SonyStrict{} 的实际 bpp 中位为 2.499，\NikonStrict{} 为 2.615。Nikon 的 header 中位约 0.009 bpp，主要成本来自 GCLI、data 和 sign 子流；Sony 的 payload、width update、sign 和 zero-run 决定主要成本。报告性能时必须使用实际 bpp，而不是只引用 target bpp。高码率端还需要单独标出 Sony 平台化，否则 5.0 bpp 请求点会被误读为同码率比较。
+
+\subsection{Sony selector stream-fit 敏感性}
+
+真实 Sony HQ probe 还暴露出一个重要限制：当前 strict canonical 的 Sony component selector 均值为 1.25，而两个真实 HQ 文件的 selector 均值约为 0.742。为检查这是不是任意选择造成的偏差，我新增 \texttt{stream\_fitted\_sony\_selector\_eval.py}，只把 Sony selector 分布替换为真实 probe 的低差异交织周期；变换、base-step 搜索、width/zero-run/sign 成本、场景、target 和指标均保持不变。\SonyStreamFitDir{} 记录了 24 场景、6 target、15 worker 的敏感性输出。
+
+\begin{table}[!t]
+\centering
+\caption{Sony stream-fitted selector 敏感性，strict canonical 与真实 selector 分布变体}
+\label{tab:sony-stream-fit}
+\begin{tabular}{ccccc}
+\toprule
+target & strict bpp & fit bpp & strict PSNR & fit PSNR\\
+\midrule
+1.5 & 1.500 & 1.500 & 52.736 & 51.575\\
+2.0 & 1.999 & 2.000 & 57.443 & 55.819\\
+2.5 & 2.499 & 2.499 & 60.848 & 59.346\\
+3.0 & 2.998 & 2.999 & 64.015 & 62.252\\
+4.0 & 3.695 & 3.997 & 66.767 & 66.637\\
+5.0 & 3.695 & 4.180 & 67.398 & 67.653\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+表\ref{tab:sony-stream-fit} 的含义很窄：贴近真实 selector 分布后，Sony 高码率可达范围从约 3.695 bpp 抬到约 4.180 bpp，但仍低于公开 HQ 样张的 4.468/4.762 bpp；低中码率 PSNR 下降，高码率接近或略高。这说明当前 canonical selector 选择并非唯一，且真实相机还可能有更复杂的 packet/RD 分配策略。本文因此保留 strict canonical 为主结果，把 stream-fit 当作敏感性和调参方向，而不是新的 production encoder claim。
+
+\section{等质量 BD-rate}
+
+图\ref{fig:bd-rate} 与表\ref{tab:bd} 给出等质量 BD-rate。只有同一 source 上两条 RD 曲线存在共同质量区间时才计入 \texttt{ok\_sources}。这也是为什么 whole PSNR 只有 11/24 个场景可计算，而不是 24/24。
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_bd_rate_summary.png}
+\caption{等质量 BD-rate 摘要。方向为 Nikon 相对 Sony，正值表示 Nikon canonical 为达到同等质量需要更多实际 syntax bpp。}
+\label{fig:bd-rate}
+\end{figure}
+
+\begin{table}[!t]
+\centering
+\caption{BD-rate 中位数与可计算样本数}
+\label{tab:bd}
+\begin{tabular}{lccc}
+\toprule
+指标 & group & ok/skipped & 中位 BD-rate\\
+\midrule
+PSNR & whole & 11/13 & +4.758\%\\
+MAE & whole & 11/13 & +13.614\%\\
+grad-PSNR & detail & 9/15 & +0.828\%\\
+SSIM & detail & 11/13 & +1.416\%\\
+MS-SSIM & detail & 11/13 & +5.598\%\\
+GMSD & detail & 11/13 & +0.237\%\\
+VIF-style & information & 7/17 & +41.731\%\\
+coeff SNR & quantization & 11/13 & +66.045\%\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+whole PSNR 的分位区间为 -29.635\% 到 +46.572\%，MAE 为 -21.790\% 到 +58.796\%。这个区间横跨两种方向，说明中位数只能作为可计算子集上的摘要。VIF-style 只有 7/24 个场景可积分，error-HF 类指标覆盖更少，系数域指标又不是同一物理系数空间下的生产编码器比较。本文因此把 BD-rate 放在证据链中使用，不把它写成唯一裁判。后续版本还应加入单调包络、PCHIP/梯形积分敏感性、skip reason 和 per-scene sign count。
+
+\section{场景级差异}
+
+图\ref{fig:scene-rank} 只作为场景敏感性诊断，不能替代 actual-bpp RD 曲线。负值偏向 Nikon，正值偏向 Sony。Sony 更容易在相位别名、棋盘、色度噪声和部分高频纹理场景中占优；Nikon 更容易在平滑、暗部、亮部 rolloff、低对比细节和若干红蓝细节场景中占优。场景排序解释了为什么 BD-rate 的可计算样本数、actual-bpp paired coverage 和分位区间必须报告。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.90\textwidth]{fig_strict_scene_rank.png}
+\caption{场景级 whole PSNR 方向诊断。横轴为 Sony 减 Nikon 的平均差；该图不作为码率横轴性能比较。}
+\label{fig:scene-rank}
+\end{figure*}
+
+这类排序也提醒我们，RAW 压缩评价不能只选少数漂亮样片。需要包含暗部噪声、亮部滚降、绿色相位、红蓝分量、细线、棋盘、纹理和低对比细节，否则结论会对场景分布过拟合。
+
+\section{局部 ROI 检查}
+
+ROI 不是为了主观挑图，而是为了检查全局曲线没有掩盖局部风险。图\ref{fig:roi-shadow} 到图\ref{fig:roi-rb} 使用 2.0 bpp 请求点的 strict canonical 重建，显示参考、Nikon、Sony 以及两者误差热图。
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.95\textwidth]{fig_strict_roi_shadow_noise.png}
+\caption{暗部噪声 ROI，shadow\_noise，2.0 bpp 请求。该图检查暗部提亮后局部误差和噪声纹理。}
+\label{fig:roi-shadow}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.95\textwidth]{fig_strict_roi_high_iso_texture.png}
+\caption{高 ISO 纹理 ROI，high\_iso\_texture，2.0 bpp 请求。该图检查噪声、微纹理和边缘误差。}
+\label{fig:roi-highiso}
+\end{figure*}
+
+\begin{figure*}[!t]
+\centering
+\includegraphics[width=0.95\textwidth]{fig_strict_roi_highlight_rolloff.png}
+\caption{亮部 rolloff ROI，highlight\_rolloff，2.0 bpp 请求。该图检查高光附近的投影和残差传播。}
+\label{fig:roi-highlight}
+\end{figure*}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_roi_thin_black_lines.png}
+\caption{细线 ROI，thin\_black\_lines，2.0 bpp 请求。该图检查高频线条和局部边缘。}
+\label{fig:roi-lines}
+\end{figure}
+
+\begin{figure}[!t]
+\centering
+\includegraphics[width=\linewidth]{fig_strict_roi_red_blue_fine_text.png}
+\caption{红蓝细节 ROI，red\_blue\_fine\_text，2.0 bpp 请求。该图检查 R/B 分相位细节误差。}
+\label{fig:roi-rb}
+\end{figure}
+
+\FloatBarrier
+\section{可复现性}
+
+表\ref{tab:repro} 给出本批次可复现入口。所有主数字来自当前脚本和 strict 目录，报告不引用旧代理输出作为主结论。当前 Windows 环境下应优先使用 \texttt{py} 或显式 Python 路径运行脚本；直接调用 \texttt{python} 可能落到 WindowsApps shim。
+
+\begin{table}[!t]
+\centering
+\caption{可复现入口}
+\label{tab:repro}
+\begin{tabularx}{\linewidth}{p{0.28\linewidth}X}
+\toprule
+阶段 & 命令或文件\\
+\midrule
+反推审计 & \texttt{audit\_824\_826\_encoder\_reversibility.py}\\
+strict 编码评估 & \texttt{strict\_824\_826\_math\_eval.py --jobs 24}\\
+数学洞见与分层评价 & \texttt{strict\_824\_826\_insight\_eval.py --jobs 24}，输出 \InsightDir{}\\
+真实样张并行探测 & \texttt{probe\_production\_fit\_samples.py --jobs 15}，输出 \ProductionFitDir{}\\
+production-fit audit & \texttt{audit\_production\_fit\_policy.py}\\
+Sony selector 敏感性 & \texttt{stream\_fitted\_sony\_selector\_eval.py --jobs 15}，输出 \SonyStreamFitDir{}\\
+指标验证 & 指标 reference validation 脚本，输出 \MetricValidationFile{}\\
+最小码流闭环 & \#824/\#826 minimal bitstream closure 脚本，输出 \BitstreamClosureFile{}\\
+BD-rate & \texttt{compute\_bd\_rate.py}，覆盖 PSNR、MAE、grad-PSNR、SSIM、MS-SSIM、GMSD、VIF-style 和 coeff SNR\\
+机器摘要 & \texttt{summarize\_strict\_824\_826\_math\_eval.py}\\
+图表 & strict 图表脚本\\
+报告审计 & \texttt{py tools/verify\_proxy\_four\_plane\_final.py}，或显式 \texttt{C:\textbackslash Python314\textbackslash python.exe}\\
+\bottomrule
+\end{tabularx}
+\end{table}
+
+核心文件包括 \texttt{manifest.json}、\texttt{encodes.csv}、\texttt{metrics.csv}、\texttt{syntax\_summary.csv}、\texttt{roundtrip\_audit.csv}、\texttt{target\_request\_summary.csv}、\texttt{rate\_summary.csv}、\texttt{bd\_rate\_*.csv}、\texttt{stage\_metrics.csv}、\texttt{insight\_metrics.csv}、\texttt{rd\_slope\_summary.csv}、\texttt{combined\_big\_comparison.csv}、\MetricValidationFile{}、\BitstreamClosureFile{}、\ProductionFitDir{}/\texttt{real\_bitstream\_controls.csv}、\ProductionFitDir{}/\texttt{production\_fit\_policy\_audit.csv}、\SonyStreamFitDir{}/\texttt{rate\_summary.csv} 和 \texttt{paper\_numbers.json}。其中 \texttt{paper\_numbers.json} 是主质量数字的机器摘要入口，\texttt{combined\_big\_comparison.csv} 是分层与洞见评价的合并入口。
+
+完整 artifact 仍有两项审稿风险。第一，\AuditFile{} 和 \BitstreamClosureFile{} 中的外部源码路径需要替换为仓库内快照、可访问 patch 或明确 commit。第二，PDF verifier 若启用 \texttt{--require-pdf}，需要 \texttt{pdfinfo} 或等价的内置页数检查；否则无 PDF 工具的机器会把环境问题报告成失败。
+
+\section{边界与限制}
+
+第一，本文没有真实 production encoder。strict canonical encoder 是从解码器可见数学关系和语法中反推出的可审计对象，但不等同于 Sony 或 Nikon 相机固件。第二，目标请求 bpp 与实际 syntax bpp 必须分开，尤其 Sony 在高码率端的平台化和 Nikon 有限 GTLI/GCLI row 的台阶都会影响同目标表的解释。第三，真实码流锚点只能约束解释边界：Sony HQ probe 说明公开 HQ 文件在 4.468/4.762 bpp 且 selector mean 约 0.742；Nikon 5 bpp/Bp=2 是 HE* unsupported 边界，不能和当前 \#826 HE 支持路径混为一谈。第四，BD-rate 可计算样本只有 11/24 或 9/24，部分解释性指标更少；中位数不能写成全场景真理。第五，合成 corpus 用来压力测试结构假设，不等于真实相机拍摄分布。第六，ROI 只能辅助解释局部风险，不能替代整套曲线。
+
+第七，VIF-style、残差结构、高频误差能量、局部 RD 斜率和 rate-distortion-perception 讨论只增强解释层，不把 RAW Bayer sample-domain 正确性降级为次要目标。LPIPS、VMAF、MOS 等深度感知或视频/主观融合指标在文献中有价值，但当前报告没有 demosaic/ISP 统一管线和观察者协议，因此不把它们作为主数值结论。第八，当前 artifact 还需要固定外部源码快照并消除 \texttt{pdfinfo}/\texttt{python} shim 等环境脆弱点，才能达到强 artifact review 的“一键复现”标准。
+
+minimal core bitstream closure 只允许本文说：核心 packet/precinct 语法层已经写出 bytes，并由 decoder-visible parser/entropy/dequant 逻辑回读一致。本文仍然不允许说：已经写出完整 Sony ARW 或 Nikon NEF 相机容器，或者已经复原厂商私有 RD 搜索、目标码率控制与模式选择。
+
+因此本文允许的表述是：在当前 strict decoder-visible canonical simulation 上，\SonyStrict{} 与 \NikonStrict{} 的率失真结果已经可复现、可审计，并呈现出按码率点、指标和场景变化的优势分布。本文不允许的表述是：已经证明真实 Sony/Nikon production encoder 的 production encoder equivalence claim，或已经判定某个真实相机编码器无条件优于另一个。
+
+\section{结语}
+
+本文不再复述旧代理结论，而是把 strict \#824/\#826 编码器反推结果放进同一套评价框架中。主数据来自 strict 批次；变换、量化、信息保真、残差结构和局部 RD 斜率先分层运行，再合并比较。\NikonStrict{} 在多个同目标请求 PSNR 点、roundtrip 投影精度和部分平滑/暗部/高亮场景上更强。\SonyStrict{} 在 1.5 到 3.0 bpp 请求段的码率贴合、3.0 bpp 点、系数域量化 SNR、VIF-style 信息保真、若干纹理/相位压力场景以及可积分 BD-rate 中位方向上更强；4.0 和 5.0 bpp 请求点则必须把 Sony 码率平台化写清楚。本文能给出的稳健结论是：decoder-visible canonical 层面的比较已经形成可复现证据链，production encoder 层面的最终胜负仍需真实同源多码率编码器输出。
+
+\begin{thebibliography}{99}
+\bibitem{bayer} B. E. Bayer, ``Color imaging array,'' U.S. Patent 3,971,065, 1976.
+\bibitem{j340} ITU-T Recommendation J.340, ``Reference algorithm for peak signal-to-noise ratio,'' 2023.
+\bibitem{jpegls} ISO/IEC 14495-1, ``JPEG-LS lossless and near-lossless image coding,'' 1999.
+\bibitem{jxs} JPEG Committee, ``JPEG XS,'' \url{https://jpeg.org/jpegxs/index.html}.
+\bibitem{jxsbrummer} B. Brummer and C. de Vleeschouwer, ``Adapting JPEG XS gains and priorities to tasks and contents,'' CVPR Workshops, 2020.
+\bibitem{rdo} G. J. Sullivan and T. Wiegand, ``Rate-distortion optimization for video compression,'' IEEE Signal Processing Magazine, 1998.
+\bibitem{ssim} Z. Wang, A. C. Bovik, H. R. Sheikh, and E. P. Simoncelli, ``Image quality assessment: from error visibility to structural similarity,'' IEEE TIP, 2004.
+\bibitem{msssim} Z. Wang, E. P. Simoncelli, and A. C. Bovik, ``Multiscale structural similarity for image quality assessment,'' ACSSC, 2003.
+\bibitem{gmsd} W. Xue, L. Zhang, X. Mou, and A. C. Bovik, ``Gradient magnitude similarity deviation: a highly efficient perceptual image quality index,'' IEEE TIP, 2014.
+\bibitem{vif} H. R. Sheikh and A. C. Bovik, ``Image information and visual quality,'' IEEE TIP, 2006.
+\bibitem{bd} G. Bjontegaard, ``Calculation of average PSNR differences between RD-curves,'' VCEG-M33, 2001.
+\bibitem{bdbible} C. Herglotz, M. Kränzler, R. Mons, and A. Kaup, ``The Bjøntegaard Bible: why your way of comparing video codecs may be wrong,'' arXiv:2304.12852, 2023.
+\bibitem{rdp} Y. Blau and T. Michaeli, ``The rate-distortion-perception tradeoff,'' ICML/PMLR, 2019.
+\bibitem{lpips} R. Zhang, P. Isola, A. A. Efros, E. Shechtman, and O. Wang, ``The unreasonable effectiveness of deep features as a perceptual metric,'' CVPR, 2018.
+\bibitem{jpegai} JPEG Committee, ``JPEG AI quality assessment metrics,'' \url{https://jpegai.github.io/6-metrics/}.
+\bibitem{vmaf} Z. Li, A. Aaron, I. Katsavounidis, A. Moorthy, and M. Manohara, ``Toward a practical perceptual video quality metric,'' Netflix Technology Blog/VMAF technical report, 2016.
+\bibitem{rawcfa} Local RAW codec evidence map and literature notes in \texttt{docs/}.
+\bibitem{strict824826} Local LibRaw \#824/\#826 strict canonical evaluation artifacts in \StrictDir{}.
+\bibitem{insight824826} Local stage-separated insight artifacts in \InsightDir{}.
+\end{thebibliography}
+
+\end{document}
